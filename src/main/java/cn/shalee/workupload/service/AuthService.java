@@ -15,6 +15,15 @@ public interface AuthService {
      */
     void register(RegisterRequest request);
 
+    /**
+     * @param request
+     * @return
+     */
     abstract LoginResponse login(LoginRequest request);
+
+    /**
+     * @param request
+     * @return
+     */
     abstract LoginResponse loginByEmail(EmailLoginRequest request);
 }

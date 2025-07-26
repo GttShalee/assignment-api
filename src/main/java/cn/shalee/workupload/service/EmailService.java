@@ -30,10 +30,9 @@ public class EmailService {
             helper.setSubject("您的登录验证码");
             // 设置为HTML内容，避免纯文本被过滤
             helper.setText(
-                    "<html><body><p>验证码：<b>" + code + "</b>，5分钟内有效。</p></body></html>",
+                    "<html><body><p>邮箱验证码：<b>" + code + "</b>，5分钟内有效。</p></body></html>",
                     true
             );
-//            System.out.println(message);
             mailSender.send(message);
         } catch (MessagingException e) {
             e.printStackTrace();

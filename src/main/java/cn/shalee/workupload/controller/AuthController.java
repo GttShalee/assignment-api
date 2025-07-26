@@ -4,6 +4,7 @@ import cn.shalee.workupload.dto.request.EmailLoginRequest;
 import cn.shalee.workupload.dto.request.LoginRequest;
 import cn.shalee.workupload.dto.request.RegisterRequest;
 import cn.shalee.workupload.dto.response.LoginResponse;
+import cn.shalee.workupload.dto.response.UserInfoResponse;
 import cn.shalee.workupload.entity.User;
 import cn.shalee.workupload.repository.UserRepository;
 import cn.shalee.workupload.service.AuthService;
@@ -14,7 +15,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -155,6 +159,52 @@ public class AuthController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("邮箱登录失败: email={}, error={}", request.getEmail(), e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * 获取当前登录用户信息
+     * @return 用户信息
+     */
+    @GetMapping("/me")
+    public ResponseEntity<UserInfoResponse> getCurrentUser() {
+        try {
+            // 从 SecurityContext 获取当前认证信息
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body(null);
+            }
+
+            // 获取用户邮箱（JWT 中的 subject）
+            String email = authentication.getName();
+            log.info("获取当前用户信息: email={}", email);
+
+            // 从数据库获取完整用户信息
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("用户不存在"));
+
+            // 构建用户信息响应
+            UserInfoResponse userInfo = UserInfoResponse.builder()
+                    .id(user.getId().toString())
+                    .realName(user.getRealName())
+                    .avatar_url(user.getAvatarUrl())
+                    .studentId(user.getStudentId())
+                    .email(user.getEmail())
+                    .classCode(user.getClassCode())
+                    .role(user.getRole())
+                    .roleType(user.getRoleType())
+                    .status(user.getStatus())
+                    .createdAt(user.getCreatedAt())
+                    .updatedAt(user.getUpdatedAt())
+                    .build();
+
+            log.info("成功获取用户信息: userId={}, realName={}", user.getId(), user.getRealName());
+            return ResponseEntity.ok(userInfo);
+            
+        } catch (Exception e) {
+            log.error("获取用户信息失败: {}", e.getMessage());
             throw e;
         }
     }

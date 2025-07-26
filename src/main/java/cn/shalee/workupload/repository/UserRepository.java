@@ -12,10 +12,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * 用来判断邮箱是否已经存在
      * @return true or false
      */
-        boolean existsByEmail(String email);
+    boolean existsByEmail(String email);
 
-        boolean existsByStudentId(String studentId);
+    boolean existsByStudentId(String studentId);
 
-        Optional<Object> findByEmail(String email);
-        Optional<User> findByStudentId(String studentId);
-    }
+    Optional<User> findByEmail(String email);
+    Optional<User> findByStudentId(String studentId);
+}

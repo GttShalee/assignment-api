@@ -74,7 +74,7 @@ public class AuthServiceImpl implements AuthService {
         }
         // 2.查看邮箱是否存在
         // 2. 从数据库获取用户
-        User user = (User) userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException("AUTH-001", "邮箱未注册"));
 
         // 3. 验证验证码
