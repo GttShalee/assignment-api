@@ -35,6 +35,9 @@ public class Homework {
     @Column(name = "attachment_url")
     private String attachmentUrl;
     
+    @Column(name = "file_name")
+    private String fileName;
+    
     @Column(name = "publish_time", nullable = false)
     private LocalDateTime publishTime;
     

@@ -26,6 +26,9 @@ public class CreateHomeworkRequest {
     @JsonProperty("attachment_url")
     private String attachmentUrl;
     
+    @JsonProperty("file_name")
+    private String fileName;
+    
     @NotNull(message = "发布时间不能为空")
     @JsonProperty("publish_time")
     private LocalDateTime publishTime;

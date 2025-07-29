@@ -23,7 +23,7 @@ git commit --no-verify -m "%commit_msg%"
 
 if %errorlevel% equ 0 (
     echo.
-    echo  Success！！！
+    echo  Success!!!
     echo.
     echo Recently log:
     git log --oneline -3

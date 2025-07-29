@@ -34,4 +34,6 @@ public class HomeworkResponse {
     private LocalDateTime createdAt;
     @JsonProperty("updated_at")
     private LocalDateTime updatedAt;
+    @JsonProperty("file_name")
+    private String fileName;
 } 

@@ -26,7 +26,7 @@ public class ClassController {
     
     @GetMapping
     public ResponseEntity<List<ClassResponse>> getClassList() {
-        log.info("收到获取班级列表请求");
+//        log.info("收到获取班级列表请求");
         
         List<Class> classes = classRepository.findAll();
         List<ClassResponse> response = classes.stream()

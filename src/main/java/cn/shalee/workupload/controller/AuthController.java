@@ -123,6 +123,8 @@ public class AuthController {
         user.setRealName(request.getRealName());
         user.setStudentId(request.getStudentId());
         user.setClassCode(request.getClassCode());
+
+        user.setAvatarUrl("https://raw.githubusercontent.com/GttShalee/Blog-pic/main/default_avatar.png");
         // 默认学生角色
         user.setRoleType(1);
         // 默认激活状态

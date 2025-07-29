@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @Slf4j
@@ -27,15 +29,17 @@ public class HomeworkController {
     
     @GetMapping
     public ResponseEntity<Page<HomeworkResponse>> getHomeworkList(
-            @RequestParam(required = false) String classCode,
-            @RequestParam(required = false) Integer status,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         
-        log.info("收到获取作业列表请求: classCode={}, status={}, page={}, pageSize={}", 
-                classCode, status, page, pageSize);
+        // 获取当前登录用户信息
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = authentication.getName();
         
-        Page<HomeworkResponse> response = homeworkService.getHomeworkList(classCode, status, page, pageSize);
+        log.info("收到获取作业列表请求: userEmail={}, page={}, pageSize={}", 
+                userEmail, page, pageSize);
+        
+        Page<HomeworkResponse> response = homeworkService.getHomeworkListByUser(userEmail, page, pageSize);
         return ResponseEntity.ok(response);
     }
     
@@ -51,15 +55,23 @@ public class HomeworkController {
             @PathVariable Long id, 
             @Valid @RequestBody CreateHomeworkRequest request) {
         
-        log.info("收到更新作业请求: id={}", id);
-        HomeworkResponse response = homeworkService.updateHomework(id, request);
+        // 获取当前登录用户信息
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = authentication.getName();
+        
+        log.info("收到更新作业请求: id={}, userEmail={}", id, userEmail);
+        HomeworkResponse response = homeworkService.updateHomework(id, request, userEmail);
         return ResponseEntity.ok(response);
     }
     
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteHomework(@PathVariable Long id) {
-        log.info("收到删除作业请求: id={}", id);
-        homeworkService.deleteHomework(id);
+        // 获取当前登录用户信息
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = authentication.getName();
+        
+        log.info("收到删除作业请求: id={}, userEmail={}", id, userEmail);
+        homeworkService.deleteHomework(id, userEmail);
         return ResponseEntity.ok().build();
     }
 } 
