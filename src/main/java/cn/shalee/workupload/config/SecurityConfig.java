@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -33,6 +34,7 @@ public class SecurityConfig {
                         .requestMatchers("/uploads/**").permitAll()  // 允许访问上传的文件
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/homework/**").authenticated()
+                        .requestMatchers("/api/homework-submission/**").authenticated()
                         .requestMatchers("/api/class/**").authenticated()
                         .requestMatchers("/api/upload/**").authenticated()
                         .anyRequest().authenticated()
@@ -40,7 +42,7 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
-                .cors();
+                .cors(Customizer.withDefaults());
 
         return http.build();
     }

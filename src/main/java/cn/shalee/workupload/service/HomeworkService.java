@@ -3,10 +3,12 @@ package cn.shalee.workupload.service;
 import cn.shalee.workupload.dto.request.CreateHomeworkRequest;
 import cn.shalee.workupload.dto.response.HomeworkResponse;
 import cn.shalee.workupload.entity.Homework;
+import cn.shalee.workupload.entity.HomeworkLog;
 import cn.shalee.workupload.entity.User;
+import cn.shalee.workupload.exception.BusinessException;
+import cn.shalee.workupload.repository.HomeworkLogRepository;
 import cn.shalee.workupload.repository.HomeworkRepository;
 import cn.shalee.workupload.repository.UserRepository;
-import cn.shalee.workupload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -17,6 +19,9 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * @author 31930
@@ -28,6 +33,7 @@ public class HomeworkService {
     
     private final HomeworkRepository homeworkRepository;
     private final UserRepository userRepository;
+    private final HomeworkLogRepository homeworkLogRepository;
     
     public HomeworkResponse createHomework(CreateHomeworkRequest request, String userEmail) {
         log.info("创建作业: title={}, classCode={}, userEmail={}", request.getTitle(), request.getClassCode(), userEmail);
@@ -59,12 +65,43 @@ public class HomeworkService {
         // 创建作业文件夹
         createHomeworkFolder(user, savedHomework);
         
+        // 为班级所有学生创建初始作业日志记录
+        createInitialHomeworkLogs(savedHomework);
+        
         return convertToResponse(savedHomework);
     }
     
     /**
+     * 为班级所有学生创建初始作业日志记录
+     */
+    private void createInitialHomeworkLogs(Homework homework) {
+        try {
+            // 获取班级所有学生
+            List<User> students = userRepository.findByClassCodeAndRoleType(homework.getClassCode(), 1);
+            
+            // 为每个学生创建初始日志记录
+            List<HomeworkLog> initialLogs = students.stream()
+                    .map(student -> HomeworkLog.builder()
+                            .homeworkId(homework.getId().intValue())
+                            .studentId(student.getStudentId())
+                            .status(0) // 0表示未提交
+                            .createdAt(LocalDateTime.now())
+                            .updatedAt(LocalDateTime.now())
+                            .build())
+                    .collect(Collectors.toList());
+            
+            homeworkLogRepository.saveAll(initialLogs);
+            log.info("为班级 {} 的 {} 名学生创建了初始作业日志记录", homework.getClassCode(), students.size());
+            
+        } catch (Exception e) {
+            log.error("创建初始作业日志记录失败: {}", e.getMessage(), e);
+            // 不抛出异常，避免影响作业创建流程
+        }
+    }
+    
+    /**
      * 创建作业文件夹
-     * 文件夹命名格式：学委用户名称+作业名+时间
+     * 文件夹命名格式：班级-作业名称-日期
      */
     private void createHomeworkFolder(User user, Homework homework) {
         try {
@@ -75,9 +112,9 @@ public class HomeworkService {
                 log.info("创建基础目录: {}", baseDir.getAbsolutePath());
             }
             
-            // 生成文件夹名称：学委用户名称+作业名+时间
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-            String folderName = user.getRealName() + "_" + homework.getTitle() + "_" + timestamp;
+            // 生成文件夹名称：班级-作业名称-日期
+            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String folderName = homework.getClassCode() + "-" + homework.getTitle() + "-" + timestamp;
             
             // 处理文件夹名称中的特殊字符
             folderName = folderName.replaceAll("[\\\\/:*?\"<>|]", "_");
@@ -122,7 +159,17 @@ public class HomeworkService {
             }
         }
         
-        return homeworkPage.map(this::convertToResponse);
+        // 获取用户的作业提交状态
+        List<HomeworkLog> userLogs = homeworkLogRepository.findByStudentId(user.getStudentId());
+        Map<Integer, Integer> submissionStatusMap = userLogs.stream()
+                .collect(Collectors.toMap(HomeworkLog::getHomeworkId, HomeworkLog::getStatus));
+        
+        return homeworkPage.map(homework -> {
+            HomeworkResponse response = convertToResponse(homework);
+            // 设置提交状态，如果没有记录则默认为0（未提交）
+            response.setSubmissionStatus(submissionStatusMap.getOrDefault(homework.getId().intValue(), 0));
+            return response;
+        });
     }
     
     public Page<HomeworkResponse> getHomeworkList(String classCode, Integer status, int page, int pageSize) {

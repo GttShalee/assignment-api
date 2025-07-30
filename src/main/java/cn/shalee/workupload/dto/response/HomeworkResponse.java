@@ -36,4 +36,7 @@ public class HomeworkResponse {
     private LocalDateTime updatedAt;
     @JsonProperty("file_name")
     private String fileName;
+    
+    @JsonProperty("submission_status")
+    private Integer submissionStatus; // 0-未提交，1-已提交
 } 

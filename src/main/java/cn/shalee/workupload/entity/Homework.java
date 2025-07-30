@@ -48,7 +48,8 @@ public class Homework {
     private Integer totalScore;
     
     @Column(nullable = false)
-    private Integer status; // 0: 草稿, 1: 已发布, 2: 已截止
+    // 0: 草稿, 1: 已发布, 2: 已截止
+    private Integer status;
     
     @Column(name = "created_at")
     private LocalDateTime createdAt;

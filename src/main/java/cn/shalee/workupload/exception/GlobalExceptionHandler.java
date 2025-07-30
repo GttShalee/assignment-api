@@ -1,6 +1,7 @@
 package cn.shalee.workupload.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
@@ -76,6 +77,26 @@ public class GlobalExceptionHandler {
         errorResponse.setCode("BIND_ERROR");
         errorResponse.setMessage("数据绑定失败");
         errorResponse.setData(errors);
+        errorResponse.setSuccess(false);
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    /**
+     * 处理数据完整性约束异常
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolationException(DataIntegrityViolationException ex) {
+        log.error("数据完整性约束异常: {}", ex.getMessage());
+        
+        String message = "数据操作失败";
+        if (ex.getMessage().contains("Duplicate entry") && ex.getMessage().contains("uk_student_homework")) {
+            message = "您已经提交过该作业，不能重复提交";
+        }
+        
+        ErrorResponse errorResponse = new ErrorResponse();
+        errorResponse.setCode("DUPLICATE_SUBMISSION");
+        errorResponse.setMessage(message);
         errorResponse.setSuccess(false);
         
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
