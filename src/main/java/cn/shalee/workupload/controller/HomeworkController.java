@@ -22,8 +22,12 @@ public class HomeworkController {
     
     @PostMapping
     public ResponseEntity<HomeworkResponse> createHomework(@Valid @RequestBody CreateHomeworkRequest request) {
-        log.info("收到创建作业请求: title={}", request.getTitle());
-        HomeworkResponse response = homeworkService.createHomework(request);
+        // 获取当前登录用户信息
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = authentication.getName();
+        
+        log.info("收到创建作业请求: title={}, userEmail={}", request.getTitle(), userEmail);
+        HomeworkResponse response = homeworkService.createHomework(request, userEmail);
         return ResponseEntity.ok(response);
     }
     

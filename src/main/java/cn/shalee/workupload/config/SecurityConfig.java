@@ -30,6 +30,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/", "/index.html", "/static/**").permitAll()
+                        .requestMatchers("/uploads/**").permitAll()  // 允许访问上传的文件
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/homework/**").authenticated()
                         .requestMatchers("/api/class/**").authenticated()

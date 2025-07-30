@@ -34,7 +34,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         try {
             String jwt = getJwtFromRequest(request);
-            log.debug("JWT Filter - Request URI: {}, JWT: {}", request.getRequestURI(), jwt != null ? "present" : "null");
+            log.debug("JWT Filter - Request URI: {}, JWT: {}", request.getRequestURI(),
+                    jwt != null ? "present" : "null");
 
             if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)) {
                 String username = jwtTokenProvider.getUsernameFromToken(jwt);
@@ -42,9 +43,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
                 if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    userDetails, null, userDetails.getAuthorities());
+                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                            userDetails, null, userDetails.getAuthorities());
                     authentication.setDetails(
                             new WebAuthenticationDetailsSource().buildDetails(request));
 
@@ -63,11 +63,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private String getJwtFromRequest(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
-        
+
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7); // 去掉 "Bearer " 前缀
         }
-        
+
         return null;
     }
 }

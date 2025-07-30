@@ -14,6 +14,13 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+/**
+ * @author 31930
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -22,8 +29,17 @@ public class HomeworkService {
     private final HomeworkRepository homeworkRepository;
     private final UserRepository userRepository;
     
-    public HomeworkResponse createHomework(CreateHomeworkRequest request) {
-        log.info("创建作业: title={}, classCode={}", request.getTitle(), request.getClassCode());
+    public HomeworkResponse createHomework(CreateHomeworkRequest request, String userEmail) {
+        log.info("创建作业: title={}, classCode={}, userEmail={}", request.getTitle(), request.getClassCode(), userEmail);
+        
+        // 获取用户信息
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new BusinessException("USER-001", "用户不存在"));
+        
+        // 检查用户权限（只有学委和管理员可以创建作业）
+        if (user.getRoleType() != 0 && user.getRoleType() != 2) {
+            throw new BusinessException("PERMISSION-001", "只有学委和管理员可以创建作业");
+        }
         
         Homework homework = Homework.builder()
                 .classCode(request.getClassCode())
@@ -40,7 +56,42 @@ public class HomeworkService {
         Homework savedHomework = homeworkRepository.save(homework);
         log.info("作业创建成功: id={}", savedHomework.getId());
         
+        // 创建作业文件夹
+        createHomeworkFolder(user, savedHomework);
+        
         return convertToResponse(savedHomework);
+    }
+    
+    /**
+     * 创建作业文件夹
+     * 文件夹命名格式：学委用户名称+作业名+时间
+     */
+    private void createHomeworkFolder(User user, Homework homework) {
+        try {
+            // 创建基础目录
+            File baseDir = new File("uploads/homework");
+            if (!baseDir.exists()) {
+                baseDir.mkdirs();
+                log.info("创建基础目录: {}", baseDir.getAbsolutePath());
+            }
+            
+            // 生成文件夹名称：学委用户名称+作业名+时间
+            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+            String folderName = user.getRealName() + "_" + homework.getTitle() + "_" + timestamp;
+            
+            // 处理文件夹名称中的特殊字符
+            folderName = folderName.replaceAll("[\\\\/:*?\"<>|]", "_");
+            
+            File homeworkFolder = new File(baseDir, folderName);
+            if (homeworkFolder.mkdir()) {
+                log.info("作业文件夹创建成功: {}", homeworkFolder.getAbsolutePath());
+            } else {
+                log.warn("作业文件夹创建失败: {}", homeworkFolder.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            log.error("创建作业文件夹时发生错误: {}", e.getMessage(), e);
+            // 不抛出异常，避免影响作业创建流程
+        }
     }
     
     public Page<HomeworkResponse> getHomeworkListByUser(String userEmail, int page, int pageSize) {
@@ -64,7 +115,7 @@ public class HomeworkService {
             // role_type为1或2的返回用户所在班级的作业
             if (user.getClassCode() == null || user.getClassCode().trim().isEmpty()) {
                 log.warn("用户班级代码为空，返回空结果");
-                homeworkPage = homeworkRepository.findByClassCode("", pageable); // 返回空结果
+                homeworkPage = homeworkRepository.findByClassCode("", pageable);
             } else {
                 log.info("用户角色为学生/学委，返回班级作业: classCode={}", user.getClassCode());
                 homeworkPage = homeworkRepository.findByClassCode(user.getClassCode(), pageable);
