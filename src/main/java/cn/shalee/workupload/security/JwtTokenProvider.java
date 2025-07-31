@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 public class JwtTokenProvider {
@@ -21,14 +22,25 @@ public class JwtTokenProvider {
     private long jwtExpirationMs;
 
     public String generateToken(User user) {
+        // 生成唯一的token ID
+        String tokenId = UUID.randomUUID().toString();
+        
         return Jwts.builder()
                 .setSubject(user.getEmail())
                 .claim("userId", user.getId())
                 .claim("role", user.getRoleType())
+                .claim("tokenId", tokenId)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
                 .signWith(Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8)), SignatureAlgorithm.HS256)
                 .compact();
+    }
+    
+    /**
+     * 生成token ID（用于存储到数据库）
+     */
+    public String generateTokenId() {
+        return UUID.randomUUID().toString();
     }
 
     public boolean validateToken(String token) {
@@ -69,5 +81,13 @@ public class JwtTokenProvider {
             return Long.parseLong((String) userId);
         }
         return null;
+    }
+    
+    /**
+     * 从token中获取token ID
+     */
+    public String getTokenIdFromToken(String token) {
+        Claims claims = getClaimsFromToken(token);
+        return claims.get("tokenId", String.class);
     }
 }

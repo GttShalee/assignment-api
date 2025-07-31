@@ -51,4 +51,10 @@ public class User {
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+    
+    @Column(name = "current_token_id")
+    private String currentTokenId;
+    
+    @Column(name = "last_login_time")
+    private LocalDateTime lastLoginTime;
 }

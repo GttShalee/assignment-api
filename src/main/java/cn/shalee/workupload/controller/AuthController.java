@@ -9,6 +9,7 @@ import cn.shalee.workupload.entity.User;
 import cn.shalee.workupload.repository.UserRepository;
 import cn.shalee.workupload.service.AuthService;
 import cn.shalee.workupload.service.EmailService;
+import cn.shalee.workupload.service.TokenValidationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,11 +19,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 import java.util.Random;
@@ -46,6 +44,7 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthService authService;
+    private final TokenValidationService tokenValidationService;
     
     // 内存验证码存储 - 改为非 final，避免构造器注入问题
     private final Map<String, String> codeMap = new java.util.concurrent.ConcurrentHashMap<>();
@@ -208,6 +207,108 @@ public class AuthController {
         } catch (Exception e) {
             log.error("获取用户信息失败: {}", e.getMessage());
             throw e;
+        }
+    }
+    
+    /**
+     * 用户登出
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<String> logout() {
+        try {
+            // 从 SecurityContext 获取当前认证信息
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.ok("已登出");
+            }
+
+            // 获取用户邮箱
+            String email = authentication.getName();
+            log.info("用户登出: email={}", email);
+            
+            // 清除用户的token ID
+            tokenValidationService.clearUserTokenId(email);
+            
+            // 清除SecurityContext
+            SecurityContextHolder.clearContext();
+            
+            log.info("用户登出成功: email={}", email);
+            return ResponseEntity.ok("登出成功");
+            
+        } catch (Exception e) {
+            log.error("用户登出失败: {}", e.getMessage());
+            return ResponseEntity.internalServerError().body("登出失败");
+        }
+    }
+
+    /**
+     * 更换头像
+     */
+    @PostMapping("/change_avatar")
+    public ResponseEntity<String> changeAvatar(@RequestParam("file") MultipartFile file) {
+        try {
+            // 从 SecurityContext 获取当前认证信息
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body("未登录");
+            }
+
+            // 获取用户邮箱
+            String email = authentication.getName();
+            log.info("用户更换头像: email={}", email);
+
+            // 从数据库获取用户信息
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("用户不存在"));
+
+            // 调用服务层处理头像上传
+            String avatarUrl = authService.changeAvatar(user, file);
+            
+            log.info("用户头像更换成功: email={}, avatarUrl={}", email, avatarUrl);
+            return ResponseEntity.ok(avatarUrl);
+            
+        } catch (Exception e) {
+            log.error("更换头像失败: {}", e.getMessage());
+            return ResponseEntity.internalServerError().body("更换头像失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 更新密码
+     */
+    @PostMapping("/change_passwd")
+    public ResponseEntity<String> changePassword(@RequestBody Map<String, String> request) {
+        try {
+            // 从 SecurityContext 获取当前认证信息
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body("未登录");
+            }
+
+            // 获取用户邮箱
+            String email = authentication.getName();
+            log.info("用户更新密码: email={}", email);
+
+            String oldPassword = request.get("oldPassword");
+            String newPassword = request.get("newPassword");
+            String verificationCode = request.get("verificationCode");
+
+            if (oldPassword == null || newPassword == null || verificationCode == null) {
+                return ResponseEntity.badRequest().body("参数不完整");
+            }
+
+            // 调用服务层处理密码更新
+            authService.changePassword(email, oldPassword, newPassword, verificationCode);
+            
+            log.info("用户密码更新成功: email={}", email);
+            return ResponseEntity.ok("密码更新成功");
+            
+        } catch (Exception e) {
+            log.error("更新密码失败: {}", e.getMessage());
+            return ResponseEntity.internalServerError().body("更新密码失败: " + e.getMessage());
         }
     }
 }

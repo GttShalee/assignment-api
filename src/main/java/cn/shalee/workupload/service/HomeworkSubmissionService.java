@@ -19,10 +19,15 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * 作业提交业务逻辑服务
@@ -52,7 +57,7 @@ public class HomeworkSubmissionService {
 //        if (user.getRoleType() != 1) {
 //            throw new BusinessException("PERMISSION-001", "只有学生可以提交作业");
 //        }
-        
+//
         // 检查作业是否存在
         Homework homework = homeworkRepository.findById(request.getHomeworkId())
                 .orElseThrow(() -> new BusinessException("HOMEWORK-001", "作业不存在"));
@@ -295,6 +300,112 @@ public class HomeworkSubmissionService {
      */
     public User getUserByEmail(String email) {
         return userRepository.findByEmail(email).orElse(null);
+    }
+    
+    /**
+     * 下载作业提交包
+     */
+    public byte[] downloadHomeworkSubmissions(Long homeworkId, String userEmail) throws IOException {
+        log.info("下载作业提交包: homeworkId={}, userEmail={}", homeworkId, userEmail);
+        
+        // 获取用户信息
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new BusinessException("USER-001", "用户不存在"));
+        
+        // 权限检查：只有学委和管理员可以下载
+        if (user.getRoleType() != 0 && user.getRoleType() != 2) {
+            throw new BusinessException("PERMISSION-007", "只有学委和管理员可以下载作业提交包");
+        }
+        
+        // 检查作业是否存在
+        Homework homework = homeworkRepository.findById(homeworkId)
+                .orElseThrow(() -> new BusinessException("HOMEWORK-001", "作业不存在"));
+        
+        // 获取提交记录
+        List<HomeworkSubmission> submissions;
+        if (user.getRoleType() == 2) {
+            // 学委只能下载本班级的提交
+            submissions = homeworkSubmissionRepository.findByHomeworkIdAndClassCode(homeworkId, user.getClassCode());
+        } else {
+            // 管理员下载所有提交
+            submissions = homeworkSubmissionRepository.findByHomeworkId(homeworkId);
+        }
+        
+        if (submissions.isEmpty()) {
+            throw new BusinessException("SUBMISSION-003", "没有找到作业提交记录");
+        }
+        
+        // 创建临时ZIP文件
+        Path tempZipPath = Files.createTempFile("homework_submissions_", ".zip");
+        
+        try (ZipOutputStream zipOut = new ZipOutputStream(Files.newOutputStream(tempZipPath))) {
+            for (HomeworkSubmission submission : submissions) {
+                if (submission.getSubmissionFileUrl() != null && !submission.getSubmissionFileUrl().isEmpty()) {
+                    // 构建文件路径
+                    String fileUrl = submission.getSubmissionFileUrl();
+                    if (fileUrl.startsWith("/uploads/")) {
+                        fileUrl = fileUrl.substring(1); // 去掉开头的斜杠
+                    }
+                    
+                    Path filePath = Paths.get(fileUrl);
+                    if (Files.exists(filePath)) {
+                        // 获取学生信息
+                        User student = userRepository.findByStudentId(submission.getStudentId()).orElse(null);
+                        String studentName = student != null ? student.getRealName() : submission.getStudentId();
+                        
+                        // 构建ZIP中的文件名：学号_姓名_原始文件名
+                        String originalFileName = submission.getSubmissionFileName();
+                        String extension = "";
+                        if (originalFileName != null && originalFileName.contains(".")) {
+                            extension = originalFileName.substring(originalFileName.lastIndexOf("."));
+                        }
+                        String zipFileName = submission.getStudentId() + "_" + studentName + extension;
+                        
+                        // 添加到ZIP文件
+                        ZipEntry zipEntry = new ZipEntry(zipFileName);
+                        zipOut.putNextEntry(zipEntry);
+                        
+                        Files.copy(filePath, zipOut);
+                        zipOut.closeEntry();
+                        
+                        log.info("添加文件到ZIP: studentId={}, fileName={}", submission.getStudentId(), zipFileName);
+                    } else {
+                        log.warn("文件不存在: {}", filePath);
+                    }
+                }
+            }
+        }
+        
+        // 读取ZIP文件内容
+        byte[] zipContent = Files.readAllBytes(tempZipPath);
+        
+        // 删除临时文件
+        Files.delete(tempZipPath);
+        
+        log.info("作业提交包下载完成: homeworkId={}, fileCount={}, size={} bytes", 
+                homeworkId, submissions.size(), zipContent.length);
+        
+        return zipContent;
+    }
+    
+    /**
+     * 获取作业提交包的文件名
+     */
+    public String getHomeworkSubmissionsZipFileName(Long homeworkId, String userEmail) {
+        // 获取用户信息
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new BusinessException("USER-001", "用户不存在"));
+        
+        // 检查作业是否存在
+        Homework homework = homeworkRepository.findById(homeworkId)
+                .orElseThrow(() -> new BusinessException("HOMEWORK-001", "作业不存在"));
+        
+        // 生成文件名：作业提交_{作业标题}.zip
+        String fileName = "作业提交_" + homework.getTitle() + ".zip";
+        // 处理文件名中的特殊字符
+        fileName = fileName.replaceAll("[\\\\/:*?\"<>|]", "_");
+        
+        return fileName;
     }
     
     /**

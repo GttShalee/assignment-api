@@ -1,5 +1,6 @@
 package cn.shalee.workupload.security;
 
+import cn.shalee.workupload.service.TokenValidationService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,6 +26,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserDetailsService userDetailsService;
+    private final TokenValidationService tokenValidationService;
 
     @Override
     protected void doFilterInternal(
@@ -37,7 +39,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             log.debug("JWT Filter - Request URI: {}, JWT: {}", request.getRequestURI(),
                     jwt != null ? "present" : "null");
 
-            if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)) {
+            if (StringUtils.hasText(jwt) && tokenValidationService.validateToken(jwt)) {
                 String username = jwtTokenProvider.getUsernameFromToken(jwt);
                 log.debug("JWT Filter - Valid token, username: {}", username);
 

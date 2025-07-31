@@ -9,13 +9,20 @@ import cn.shalee.workupload.exception.BusinessException;
 import cn.shalee.workupload.repository.UserRepository;
 import cn.shalee.workupload.security.JwtTokenProvider;
 import cn.shalee.workupload.service.AuthService;
+import cn.shalee.workupload.service.TokenValidationService;
 import cn.shalee.workupload.service.VerificationCodeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-
+import org.springframework.web.multipart.MultipartFile;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.UUID;
 import java.time.LocalDateTime;
 
 /**
@@ -30,6 +37,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
+    private final TokenValidationService tokenValidationService;
     private final VerificationCodeService verificationCodeService;
 
     @Override
@@ -52,6 +60,10 @@ public class AuthServiceImpl implements AuthService {
     private LoginResponse generateLoginResponse(User user) {
         // 生成JWT令牌
         String token = jwtTokenProvider.generateToken(user);
+        
+        // 获取token ID并更新用户记录
+        String tokenId = jwtTokenProvider.getTokenIdFromToken(token);
+        tokenValidationService.updateUserTokenId(user.getEmail(), tokenId);
 
         // 构建登录响应
         return LoginResponse.builder()
@@ -83,5 +95,88 @@ public class AuthServiceImpl implements AuthService {
         }
         // 4. 生成JWT令牌
         return generateLoginResponse(user);
+    }
+    
+    @Override
+    public String changeAvatar(User user, MultipartFile file) {
+        // 验证文件
+        if (file.isEmpty()) {
+            throw new BusinessException("AVATAR-001", "请选择头像文件");
+        }
+        
+        // 验证文件类型
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new BusinessException("AVATAR-002", "只能上传图片文件");
+        }
+        
+        // 验证文件大小（限制为5MB）
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new BusinessException("AVATAR-003", "头像文件大小不能超过5MB");
+        }
+        
+        try {
+            // 创建用户专属文件夹
+            String userFolderName = user.getStudentId() + user.getRealName();
+            String uploadDir = "uploads/avatar/" + userFolderName;
+            Path uploadPath = Paths.get(uploadDir);
+            
+            // 如果文件夹不存在，创建文件夹
+            if (!Files.exists(uploadPath)) {
+                Files.createDirectories(uploadPath);
+            }
+            
+            // 生成唯一文件名
+            String originalFilename = file.getOriginalFilename();
+            String fileExtension = "";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
+            }
+            String fileName = "avatar_" + System.currentTimeMillis() + fileExtension;
+            
+            // 保存文件
+            Path filePath = uploadPath.resolve(fileName);
+            Files.copy(file.getInputStream(), filePath);
+            
+            // 更新用户头像URL
+            String avatarUrl = "/uploads/avatar/" + userFolderName + "/" + fileName;
+            user.setAvatarUrl(avatarUrl);
+            userRepository.save(user);
+            
+            log.info("用户头像更新成功: userId={}, avatarUrl={}", user.getId(), avatarUrl);
+            return avatarUrl;
+            
+        } catch (IOException e) {
+            log.error("保存头像文件失败", e);
+            throw new BusinessException("AVATAR-004", "保存头像文件失败");
+        }
+    }
+    
+    @Override
+    public void changePassword(String email, String oldPassword, String newPassword, String verificationCode) {
+        // 1. 验证用户是否存在
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException("AUTH-001", "用户不存在"));
+        
+        // 2. 验证旧密码
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new BusinessException("AUTH-002", "旧密码错误");
+        }
+        
+        // 3. 验证新密码格式（至少6位）
+        if (newPassword.length() < 6) {
+            throw new BusinessException("AUTH-003", "新密码长度不能少于6位");
+        }
+        
+        // 4. 验证邮箱验证码
+        if (!verificationCodeService.verifyCode(email, verificationCode)) {
+            throw new BusinessException("AUTH-004", "验证码错误或已过期");
+        }
+        
+        // 5. 更新密码
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        
+        log.info("用户密码更新成功: email={}", email);
     }
 }

@@ -10,6 +10,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -22,7 +24,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.UUID;
 
 /**
  * 作业提交控制器
@@ -193,5 +194,62 @@ public class HomeworkSubmissionController {
         
         Object response = homeworkSubmissionService.getHomeworkStats(homeworkId, userEmail);
         return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 获取作业提交列表（学委/管理员）
+     */
+    @GetMapping("/list/{homeworkId}")
+    public ResponseEntity<Page<HomeworkSubmissionResponse>> getHomeworkSubmissionList(
+            @PathVariable Long homeworkId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        
+        // 获取当前登录用户信息
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = authentication.getName();
+        
+        log.info("收到获取作业提交列表请求: homeworkId={}, userEmail={}, page={}, pageSize={}", 
+                homeworkId, userEmail, page, pageSize);
+        
+        Page<HomeworkSubmissionResponse> response = homeworkSubmissionService.getHomeworkSubmissions(homeworkId, userEmail, page, pageSize);
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 下载作业提交包（学委/管理员）
+     */
+    @GetMapping("/{homeworkId}/download")
+    public ResponseEntity<byte[]> downloadHomeworkSubmissions(@PathVariable Long homeworkId) {
+        // 获取当前登录用户信息
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = authentication.getName();
+        
+        log.info("收到下载作业提交包请求: homeworkId={}, userEmail={}", homeworkId, userEmail);
+        
+        try {
+            // 获取ZIP文件内容
+            byte[] zipContent = homeworkSubmissionService.downloadHomeworkSubmissions(homeworkId, userEmail);
+            
+            // 获取文件名
+            String fileName = homeworkSubmissionService.getHomeworkSubmissionsZipFileName(homeworkId, userEmail);
+            
+            // 设置响应头
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            headers.setContentDispositionFormData("attachment", fileName);
+            headers.setContentLength(zipContent.length);
+            
+            log.info("作业提交包下载成功: homeworkId={}, fileName={}, size={} bytes", 
+                    homeworkId, fileName, zipContent.length);
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(zipContent);
+                    
+        } catch (Exception e) {
+            log.error("下载作业提交包失败: homeworkId={}, error={}", homeworkId, e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 } 

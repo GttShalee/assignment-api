@@ -299,6 +299,16 @@ public class HomeworkService {
             throw new BusinessException("PERMISSION-003", "学生用户无权删除作业");
         }
         
+        // 删除作业文件夹
+        deleteHomeworkFolder(homework);
+        
+        // 删除作业相关的日志记录
+        deleteHomeworkLogs(homework.getId().intValue());
+        
+        // 删除作业相关的提交记录
+//        deleteHomeworkSubmissions(homework.getId());
+        
+        // 删除作业
         homeworkRepository.deleteById(id);
         log.info("作业删除成功: id={}", id);
     }
@@ -319,4 +329,85 @@ public class HomeworkService {
                 .updatedAt(homework.getUpdatedAt())
                 .build();
     }
+    
+    /**
+     * 删除作业文件夹
+     * 查找并删除与作业相关的文件夹
+     */
+    private void deleteHomeworkFolder(Homework homework) {
+        try {
+            File baseDir = new File("uploads/homework");
+            if (!baseDir.exists()) {
+                log.info("作业文件夹基础目录不存在，无需删除: {}", baseDir.getAbsolutePath());
+                return;
+            }
+            
+            // 查找包含班级代码和作业标题的文件夹
+            File[] folders = baseDir.listFiles();
+            if (folders == null) {
+                log.info("作业文件夹基础目录为空，无需删除");
+                return;
+            }
+            
+            String classCode = homework.getClassCode();
+            String title = homework.getTitle();
+            
+            for (File folder : folders) {
+                if (folder.isDirectory() && folder.getName().contains(classCode) && folder.getName().contains(title)) {
+                    // 递归删除文件夹及其内容
+                    if (deleteDirectory(folder)) {
+                        log.info("作业文件夹删除成功: {}", folder.getAbsolutePath());
+                    } else {
+                        log.warn("作业文件夹删除失败: {}", folder.getAbsolutePath());
+                    }
+                    break; // 找到并删除后退出循环
+                }
+            }
+            
+        } catch (Exception e) {
+            log.error("删除作业文件夹时发生错误: {}", e.getMessage(), e);
+            // 不抛出异常，避免影响作业删除流程
+        }
+    }
+    
+    /**
+     * 递归删除目录及其内容
+     */
+    private boolean deleteDirectory(File directory) {
+        if (directory.exists()) {
+            File[] files = directory.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isDirectory()) {
+                        deleteDirectory(file);
+                    } else {
+                        if (!file.delete()) {
+                            log.warn("删除文件失败: {}", file.getAbsolutePath());
+                        }
+                    }
+                }
+            }
+            return directory.delete();
+        }
+        return false;
+    }
+    
+    /**
+     * 删除作业相关的日志记录
+     */
+    private void deleteHomeworkLogs(Integer homeworkId) {
+        try {
+            List<HomeworkLog> logs = homeworkLogRepository.findByHomeworkId(homeworkId);
+            if (!logs.isEmpty()) {
+                homeworkLogRepository.deleteAll(logs);
+                log.info("删除作业日志记录成功: homeworkId={}, count={}", homeworkId, logs.size());
+            } else {
+                log.info("没有找到需要删除的作业日志记录: homeworkId={}", homeworkId);
+            }
+        } catch (Exception e) {
+            log.error("删除作业日志记录时发生错误: {}", e.getMessage(), e);
+            // 不抛出异常，避免影响作业删除流程
+        }
+    }
+
 } 
