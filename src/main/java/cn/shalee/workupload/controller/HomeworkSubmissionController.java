@@ -3,6 +3,7 @@ package cn.shalee.workupload.controller;
 import cn.shalee.workupload.dto.request.GradeHomeworkRequest;
 import cn.shalee.workupload.dto.request.SubmitHomeworkRequest;
 import cn.shalee.workupload.dto.response.HomeworkSubmissionResponse;
+import cn.shalee.workupload.dto.response.UnsubmittedMemberResponse;
 import cn.shalee.workupload.entity.Homework;
 import cn.shalee.workupload.entity.User;
 import cn.shalee.workupload.service.HomeworkSubmissionService;
@@ -24,6 +25,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * 作业提交控制器
@@ -81,8 +83,10 @@ public class HomeworkSubmissionController {
                 User user = homeworkSubmissionService.getUserByEmail(userEmail);
                 String originalFilename = file.getOriginalFilename();
                 String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-                String filename = user.getStudentId() + "_" + originalFilename;
-                
+//              这里不加前缀了，反正基本上不可能重名
+//              String filename = user.getStudentId() + "_" + originalFilename;
+                String filename = originalFilename;
+
                 // 如果文件已存在，添加时间戳
                 Path filePath = uploadPath.resolve(filename);
                 if (Files.exists(filePath)) {
@@ -250,6 +254,47 @@ public class HomeworkSubmissionController {
         } catch (Exception e) {
             log.error("下载作业提交包失败: homeworkId={}, error={}", homeworkId, e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    /**
+     * 获取作业未交成员列表（学委/管理员）
+     */
+    @GetMapping("/homework/{homeworkId}/unsubmitted-members")
+    public ResponseEntity<List<UnsubmittedMemberResponse>> getUnsubmittedMembers(@PathVariable Long homeworkId) {
+        // 获取当前登录用户信息
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = authentication.getName();
+        
+        log.info("收到获取作业未交成员列表请求: homeworkId={}, userEmail={}", homeworkId, userEmail);
+        
+        try {
+            List<UnsubmittedMemberResponse> response = homeworkSubmissionService.getUnsubmittedMembers(homeworkId, userEmail);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("获取作业未交成员列表失败: homeworkId={}, error={}", homeworkId, e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    /**
+     * 撤回作业提交（学生）
+     */
+    @DeleteMapping("/homework/{homeworkId}/withdraw")
+    public ResponseEntity<String> withdrawHomeworkSubmission(@PathVariable Long homeworkId) {
+        // 获取当前登录用户信息
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = authentication.getName();
+        
+        log.info("收到撤回作业提交请求: homeworkId={}, userEmail={}", homeworkId, userEmail);
+        
+        try {
+            homeworkSubmissionService.withdrawHomeworkSubmission(homeworkId, userEmail);
+            log.info("撤回作业提交成功: homeworkId={}, userEmail={}", homeworkId, userEmail);
+            return ResponseEntity.ok("撤回成功");
+        } catch (Exception e) {
+            log.error("撤回作业提交失败: homeworkId={}, error={}", homeworkId, e.getMessage(), e);
+            return ResponseEntity.internalServerError().body("撤回失败: " + e.getMessage());
         }
     }
 } 

@@ -54,7 +54,7 @@ public class ClassController {
     public ResponseEntity<Page<ClassMemberResponse>> getClassMembers(
             @PathVariable String classCode,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "100") int pageSize) {
         
         log.info("收到获取班级成员列表请求: classCode={}, page={}, pageSize={}", classCode, page, pageSize);
         

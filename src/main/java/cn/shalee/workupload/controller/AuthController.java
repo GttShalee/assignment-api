@@ -301,7 +301,7 @@ public class AuthController {
             }
 
             // 调用服务层处理密码更新
-            authService.changePassword(email, oldPassword, newPassword, verificationCode);
+            authService.changePassword(email, newPassword, verificationCode);
             
             log.info("用户密码更新成功: email={}", email);
             return ResponseEntity.ok("密码更新成功");

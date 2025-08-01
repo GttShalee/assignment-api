@@ -31,4 +31,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * 根据班级代码查找用户（分页）
      */
     Page<User> findByClassCode(String classCode, Pageable pageable);
+    
+    /**
+     * 根据班级代码查找所有用户
+     */
+    List<User> findByClassCode(String classCode);
 }

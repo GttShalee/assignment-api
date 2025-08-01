@@ -17,12 +17,11 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import java.io.File;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.UUID;
 import java.time.LocalDateTime;
 
 /**
@@ -153,16 +152,16 @@ public class AuthServiceImpl implements AuthService {
     }
     
     @Override
-    public void changePassword(String email, String oldPassword, String newPassword, String verificationCode) {
+    public void changePassword(String email, String newPassword, String verificationCode) {
         // 1. 验证用户是否存在
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BusinessException("AUTH-001", "用户不存在"));
         
-        // 2. 验证旧密码
-        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
-            throw new BusinessException("AUTH-002", "旧密码错误");
-        }
-        
+//        // 2. 验证旧密码
+//        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+//            throw new BusinessException("AUTH-002", "旧密码错误");
+//        }
+
         // 3. 验证新密码格式（至少6位）
         if (newPassword.length() < 6) {
             throw new BusinessException("AUTH-003", "新密码长度不能少于6位");

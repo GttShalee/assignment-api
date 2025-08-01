@@ -40,9 +40,8 @@ public interface AuthService {
     /**
      * 更新密码
      * @param email 用户邮箱
-     * @param oldPassword 旧密码
      * @param newPassword 新密码
      * @param verificationCode 验证码
      */
-    void changePassword(String email, String oldPassword, String newPassword, String verificationCode);
+    void changePassword(String email, String newPassword, String verificationCode);
 }

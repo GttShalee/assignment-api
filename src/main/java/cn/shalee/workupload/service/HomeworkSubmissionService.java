@@ -3,6 +3,7 @@ package cn.shalee.workupload.service;
 import cn.shalee.workupload.dto.request.GradeHomeworkRequest;
 import cn.shalee.workupload.dto.request.SubmitHomeworkRequest;
 import cn.shalee.workupload.dto.response.HomeworkSubmissionResponse;
+import cn.shalee.workupload.dto.response.UnsubmittedMemberResponse;
 import cn.shalee.workupload.entity.Homework;
 import cn.shalee.workupload.entity.HomeworkLog;
 import cn.shalee.workupload.entity.HomeworkSubmission;
@@ -428,6 +429,136 @@ public class HomeworkSubmissionService {
                 .updatedAt(submission.getUpdatedAt())
                 .studentName(student != null ? student.getRealName() : null)
                 .homeworkTitle(homework != null ? homework.getTitle() : null)
+                .build();
+    }
+    
+    /**
+     * 获取作业未交成员列表
+     */
+    public List<UnsubmittedMemberResponse> getUnsubmittedMembers(Long homeworkId, String userEmail) {
+        log.info("获取作业未交成员列表: homeworkId={}, userEmail={}", homeworkId, userEmail);
+        
+        // 获取用户信息
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new BusinessException("USER-001", "用户不存在"));
+        
+        // 检查作业是否存在
+        Homework homework = homeworkRepository.findById(homeworkId)
+                .orElseThrow(() -> new BusinessException("HOMEWORK-001", "作业不存在"));
+        
+        // 检查权限（只有学委或管理员可以查看）
+        if (user.getRoleType() != 2 && user.getRoleType() != 3) {
+            throw new BusinessException("PERMISSION-001", "权限不足");
+        }
+        
+        // 检查用户是否属于该班级
+        if (!homework.getClassCode().equals(user.getClassCode())) {
+            throw new BusinessException("PERMISSION-002", "只能查看本班级的作业");
+        }
+        
+        // 获取班级所有成员
+        List<User> classMembers = userRepository.findByClassCode(homework.getClassCode());
+        
+        // 获取所有作业日志记录
+        List<HomeworkLog> allLogs = homeworkLogRepository.findByHomeworkId(homeworkId.intValue());
+        
+        // 过滤出未提交的成员：
+        // 1. 在homework_log表中没有记录的成员
+        // 2. 在homework_log表中status为0的成员
+        List<String> submittedStudentIds = allLogs.stream()
+                .filter(log -> log.getStatus() == 1) // 只保留status为1的记录
+                .map(HomeworkLog::getStudentId)
+                .toList();
+        
+        // 过滤出未提交的成员
+        List<User> unsubmittedMembers = classMembers.stream()
+                .filter(member -> !submittedStudentIds.contains(member.getStudentId()))
+                .toList();
+        
+        // 转换为响应DTO
+        List<UnsubmittedMemberResponse> response = unsubmittedMembers.stream()
+                .map(this::convertToUnsubmittedMemberResponse)
+                .toList();
+        
+        log.info("获取作业未交成员列表成功: homeworkId={}, totalMembers={}, unsubmittedCount={}, submittedCount={}", 
+                homeworkId, classMembers.size(), response.size(), submittedStudentIds.size());
+        
+        return response;
+    }
+    
+    /**
+     * 撤回作业提交
+     */
+    public void withdrawHomeworkSubmission(Long homeworkId, String userEmail) {
+        log.info("撤回作业提交: homeworkId={}, userEmail={}", homeworkId, userEmail);
+        
+        // 获取用户信息
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new BusinessException("USER-001", "用户不存在"));
+        
+        // 检查作业是否存在
+        Homework homework = homeworkRepository.findById(homeworkId)
+                .orElseThrow(() -> new BusinessException("HOMEWORK-001", "作业不存在"));
+        
+        // 检查用户是否属于该班级
+        if (!homework.getClassCode().equals(user.getClassCode())) {
+            throw new BusinessException("PERMISSION-002", "只能撤回本班级的作业");
+        }
+        
+        // 查找作业提交记录
+        Optional<HomeworkSubmission> submissionOpt = homeworkSubmissionRepository.findByStudentIdAndHomeworkId(user.getStudentId(), homeworkId);
+        if (submissionOpt.isEmpty()) {
+            throw new BusinessException("SUBMISSION-004", "未找到作业提交记录");
+        }
+        
+        HomeworkSubmission submission = submissionOpt.get();
+        
+        // 删除提交的文件
+        if (submission.getSubmissionFileUrl() != null && !submission.getSubmissionFileUrl().isEmpty()) {
+            try {
+                String fileUrl = submission.getSubmissionFileUrl();
+                if (fileUrl.startsWith("/uploads/")) {
+                    fileUrl = fileUrl.substring(1); // 去掉开头的斜杠
+                }
+                
+                Path filePath = Paths.get(fileUrl);
+                if (Files.exists(filePath)) {
+                    Files.delete(filePath);
+                    log.info("删除作业文件: {}", filePath);
+                }
+            } catch (IOException e) {
+                log.error("删除作业文件失败: {}", submission.getSubmissionFileUrl(), e);
+                // 不抛出异常，继续执行
+            }
+        }
+        
+        // 删除提交记录
+        homeworkSubmissionRepository.delete(submission);
+        
+        // 更新作业日志状态为未提交
+        Optional<HomeworkLog> logOpt = homeworkLogRepository.findByHomeworkIdAndStudentId(homeworkId.intValue(), user.getStudentId());
+        if (logOpt.isPresent()) {
+            HomeworkLog log = logOpt.get();
+            log.setStatus(0); // 设置为未提交
+            log.setUpdatedAt(LocalDateTime.now());
+            homeworkLogRepository.save(log);
+        }
+        
+        log.info("撤回作业提交成功: homeworkId={}, studentId={}", homeworkId, user.getStudentId());
+    }
+    
+    /**
+     * 转换为未交成员响应DTO
+     */
+    private UnsubmittedMemberResponse convertToUnsubmittedMemberResponse(User user) {
+        return UnsubmittedMemberResponse.builder()
+                .id(user.getId())
+                .studentId(user.getStudentId())
+                .realName(user.getRealName())
+                .email(user.getEmail())
+                .avatarUrl(user.getAvatarUrl())
+                .roleType(user.getRoleType())
+                .createdAt(user.getCreatedAt())
                 .build();
     }
 } 
