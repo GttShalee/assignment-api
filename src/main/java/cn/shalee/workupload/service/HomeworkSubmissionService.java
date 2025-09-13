@@ -13,6 +13,7 @@ import cn.shalee.workupload.repository.HomeworkLogRepository;
 import cn.shalee.workupload.repository.HomeworkRepository;
 import cn.shalee.workupload.repository.HomeworkSubmissionRepository;
 import cn.shalee.workupload.repository.UserRepository;
+import cn.shalee.workupload.util.StoragePaths;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -25,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
@@ -340,40 +342,31 @@ public class HomeworkSubmissionService {
         Path tempZipPath = Files.createTempFile("homework_submissions_", ".zip");
         
         try (ZipOutputStream zipOut = new ZipOutputStream(Files.newOutputStream(tempZipPath))) {
-            for (HomeworkSubmission submission : submissions) {
-                if (submission.getSubmissionFileUrl() != null && !submission.getSubmissionFileUrl().isEmpty()) {
-                    // 构建文件路径
-                    String fileUrl = submission.getSubmissionFileUrl();
-                    if (fileUrl.startsWith("/uploads/")) {
-                        fileUrl = fileUrl.substring(1); // 去掉开头的斜杠
-                    }
-                    
-                    Path filePath = Paths.get(fileUrl);
-                    if (Files.exists(filePath)) {
-                        // 获取学生信息
-                        User student = userRepository.findByStudentId(submission.getStudentId()).orElse(null);
-                        String studentName = student != null ? student.getRealName() : submission.getStudentId();
-                        
-                        // 构建ZIP中的文件名：学号_姓名_原始文件名
-                        String originalFileName = submission.getSubmissionFileName();
-                        String extension = "";
-                        if (originalFileName != null && originalFileName.contains(".")) {
-                            extension = originalFileName.substring(originalFileName.lastIndexOf("."));
-                        }
-                        String zipFileName = submission.getStudentId() + "_" + studentName + extension;
-                        
-                        // 添加到ZIP文件
-                        ZipEntry zipEntry = new ZipEntry(zipFileName);
-                        zipOut.putNextEntry(zipEntry);
-                        
-                        Files.copy(filePath, zipOut);
-                        zipOut.closeEntry();
-                        
-                        log.info("添加文件到ZIP: studentId={}, fileName={}", submission.getStudentId(), zipFileName);
-                    } else {
-                        log.warn("文件不存在: {}", filePath);
-                    }
+            // 直接遍历作业文件夹下的所有文件
+            String timestamp = homework.getPublishTime().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String folderName = homework.getClassCode() + "-" + homework.getTitle() + "-" + timestamp;
+            folderName = folderName.replaceAll("[\\\\/:*?\"<>|]", "_");
+            
+            Path homeworkFolder = StoragePaths.getUploadsBasePath().resolve("homework").resolve(folderName);
+            
+            if (Files.exists(homeworkFolder) && Files.isDirectory(homeworkFolder)) {
+                try (var files = Files.list(homeworkFolder)) {
+                    files.filter(Files::isRegularFile)
+                         .forEach(filePath -> {
+                             try {
+                                 String fileName = filePath.getFileName().toString();
+                                 ZipEntry zipEntry = new ZipEntry(fileName);
+                                 zipOut.putNextEntry(zipEntry);
+                                 Files.copy(filePath, zipOut);
+                                 zipOut.closeEntry();
+                                 log.info("添加文件到ZIP: fileName={}", fileName);
+                             } catch (IOException e) {
+                                 log.error("添加文件到ZIP失败: {}", filePath, e);
+                             }
+                         });
                 }
+            } else {
+                log.warn("作业文件夹不存在: {}", homeworkFolder);
             }
         }
         

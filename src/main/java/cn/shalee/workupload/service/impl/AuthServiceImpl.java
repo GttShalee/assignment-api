@@ -17,6 +17,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import cn.shalee.workupload.util.StoragePaths;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -117,8 +118,7 @@ public class AuthServiceImpl implements AuthService {
         try {
             // 创建用户专属文件夹
             String userFolderName = user.getStudentId() + user.getRealName();
-            String uploadDir = "uploads/avatar/" + userFolderName;
-            Path uploadPath = Paths.get(uploadDir);
+            Path uploadPath = StoragePaths.getUploadsBasePath().resolve("avatar").resolve(userFolderName);
             
             // 如果文件夹不存在，创建文件夹
             if (!Files.exists(uploadPath)) {

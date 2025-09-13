@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -253,6 +254,47 @@ public class HomeworkSubmissionController {
                     
         } catch (Exception e) {
             log.error("下载作业提交包失败: homeworkId={}, error={}", homeworkId, e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * 单个文件直下发下载（用于前端点击单个作业、附件等的下载问题）
+     * 前端传入的是相对路径，如 /uploads/homework/xxx/文件名
+     */
+    @GetMapping("/download/single")
+    public ResponseEntity<byte[]> downloadSingle(@RequestParam("path") String relativePath,
+                                                 @RequestParam(value = "downloadName", required = false) String downloadName) {
+        try {
+            if (relativePath.startsWith("http://") || relativePath.startsWith("https://")) {
+                return ResponseEntity.badRequest().build();
+            }
+            String sanitized = relativePath.startsWith("/") ? relativePath.substring(1) : relativePath;
+            if (!sanitized.startsWith("uploads/")) {
+                return ResponseEntity.badRequest().build();
+            }
+            Path filePath = Paths.get(sanitized);
+            if (!Files.exists(filePath)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            String fileName = downloadName != null && !downloadName.isBlank()
+                    ? downloadName
+                    : filePath.getFileName().toString();
+
+            String contentType = Files.probeContentType(filePath);
+            if (contentType == null) contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(contentType));
+            headers.setContentDispositionFormData("attachment", URLEncoder.encode(fileName, java.nio.charset.StandardCharsets.UTF_8));
+            headers.setContentLength(Files.size(filePath));
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(Files.readAllBytes(filePath));
+        } catch (IOException e) {
+            log.error("单文件下载失败: path={}", relativePath, e);
             return ResponseEntity.internalServerError().build();
         }
     }

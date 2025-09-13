@@ -34,6 +34,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain) throws ServletException, IOException {
 
+        // 跳过登录接口
+        if (request.getRequestURI().startsWith("/api/auth/login"))  {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // 跳过注册接口
+        if (request.getRequestURI().startsWith("/api/auth/register"))  {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         try {
             String jwt = getJwtFromRequest(request);
             log.debug("JWT Filter - Request URI: {}, JWT: {}", request.getRequestURI(),

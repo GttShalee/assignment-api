@@ -2,6 +2,7 @@ package cn.shalee.workupload.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.system.ApplicationHome;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -18,11 +19,12 @@ public class WebConfig implements WebMvcConfigurer {
     
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 获取当前工作目录
-        String currentDir = System.getProperty("user.dir");
-        String uploadsPath = currentDir + File.separator + "uploads" + File.separator;
+        // 以可执行jar所在目录为基准，避免工作目录变化导致404
+        ApplicationHome home = new ApplicationHome(WebConfig.class);
+        File homeDir = home.getDir();
+        String uploadsPath = new File(homeDir, "uploads").getAbsolutePath() + File.separator;
         
-        log.info("配置静态资源映射 - 当前目录: {}", currentDir);
+        log.info("配置静态资源映射 - 程序目录: {}", homeDir.getAbsolutePath());
         log.info("配置静态资源映射 - 上传目录: {}", uploadsPath);
         
         // 检查目录是否存在
