@@ -57,4 +57,7 @@ public class User {
     
     @Column(name = "last_login_time")
     private LocalDateTime lastLoginTime;
+    
+    @Column(name = "fuck", nullable = false)
+    private Integer fuck; // 文件名不规范提交次数
 }

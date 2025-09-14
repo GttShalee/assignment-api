@@ -200,7 +200,9 @@ public class UploadController {
                     : filePath.getFileName().toString();
 
             String contentType = Files.probeContentType(filePath);
-            if (contentType == null) contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+            if (contentType == null) {
+                contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+            }
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.parseMediaType(contentType));

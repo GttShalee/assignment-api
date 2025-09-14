@@ -6,6 +6,7 @@ import cn.shalee.workupload.dto.response.HomeworkSubmissionResponse;
 import cn.shalee.workupload.dto.response.UnsubmittedMemberResponse;
 import cn.shalee.workupload.entity.Homework;
 import cn.shalee.workupload.entity.User;
+import cn.shalee.workupload.repository.UserRepository;
 import cn.shalee.workupload.service.HomeworkSubmissionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +21,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -39,6 +39,7 @@ import java.util.List;
 public class HomeworkSubmissionController {
     
     private final HomeworkSubmissionService homeworkSubmissionService;
+    private final UserRepository userRepository;
     
     /**
      * 提交作业
@@ -80,12 +81,9 @@ public class HomeworkSubmissionController {
                     log.info("创建作业文件夹: {}", uploadPath);
                 }
                 
-                // 生成文件名：学号_原始文件名
+                // 生成文件名：
                 User user = homeworkSubmissionService.getUserByEmail(userEmail);
                 String originalFilename = file.getOriginalFilename();
-                String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-//              这里不加前缀了，反正基本上不可能重名
-//              String filename = user.getStudentId() + "_" + originalFilename;
                 String filename = originalFilename;
 
                 // 如果文件已存在，添加时间戳
@@ -99,11 +97,14 @@ public class HomeworkSubmissionController {
                 // 保存文件
                 Files.copy(file.getInputStream(), filePath);
                 
+
+                
                 String fileUrl = "/uploads/homework/" + folderName + "/" + filename;
                 request.setSubmissionFileUrl(fileUrl);
                 request.setSubmissionFileName(originalFilename);
                 
-                log.info("作业文件上传成功: url={}, originalName={}, folder={}", fileUrl, originalFilename, folderName);
+                log.info("作业文件上传成功: url={}, originalName={}, folder={}, filenameModified={}", 
+                        fileUrl, originalFilename, folderName);
                 
             } catch (IOException e) {
                 log.error("作业文件上传失败", e);
@@ -207,8 +208,9 @@ public class HomeworkSubmissionController {
     @GetMapping("/list/{homeworkId}")
     public ResponseEntity<Page<HomeworkSubmissionResponse>> getHomeworkSubmissionList(
             @PathVariable Long homeworkId,
+
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "52") int pageSize) {
         
         // 获取当前登录用户信息
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -257,45 +259,32 @@ public class HomeworkSubmissionController {
             return ResponseEntity.internalServerError().build();
         }
     }
-
+    
     /**
-     * 单个文件直下发下载（用于前端点击单个作业、附件等的下载问题）
-     * 前端传入的是相对路径，如 /uploads/homework/xxx/文件名
+     * 增加用户fuck计数
      */
-    @GetMapping("/download/single")
-    public ResponseEntity<byte[]> downloadSingle(@RequestParam("path") String relativePath,
-                                                 @RequestParam(value = "downloadName", required = false) String downloadName) {
+    @PostMapping("/increase-fuck")
+    public ResponseEntity<String> increaseFuckCount(Authentication authentication) {
         try {
-            if (relativePath.startsWith("http://") || relativePath.startsWith("https://")) {
-                return ResponseEntity.badRequest().build();
+            String userEmail = authentication.getName();
+            User user = homeworkSubmissionService.getUserByEmail(userEmail);
+            
+            if (user == null) {
+                return ResponseEntity.badRequest().body("用户不存在");
             }
-            String sanitized = relativePath.startsWith("/") ? relativePath.substring(1) : relativePath;
-            if (!sanitized.startsWith("uploads/")) {
-                return ResponseEntity.badRequest().build();
-            }
-            Path filePath = Paths.get(sanitized);
-            if (!Files.exists(filePath)) {
-                return ResponseEntity.notFound().build();
-            }
-
-            String fileName = downloadName != null && !downloadName.isBlank()
-                    ? downloadName
-                    : filePath.getFileName().toString();
-
-            String contentType = Files.probeContentType(filePath);
-            if (contentType == null) contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType(contentType));
-            headers.setContentDispositionFormData("attachment", URLEncoder.encode(fileName, java.nio.charset.StandardCharsets.UTF_8));
-            headers.setContentLength(Files.size(filePath));
-
-            return ResponseEntity.ok()
-                    .headers(headers)
-                    .body(Files.readAllBytes(filePath));
-        } catch (IOException e) {
-            log.error("单文件下载失败: path={}", relativePath, e);
-            return ResponseEntity.internalServerError().build();
+            
+            Integer currentFuck = user.getFuck() != null ? user.getFuck() : 0;
+            user.setFuck(currentFuck + 1);
+            userRepository.save(user);
+            
+            log.info("手动增加用户fuck计数: userId={}, studentId={}, fuck={}", 
+                    user.getId(), user.getStudentId(), user.getFuck());
+            
+            return ResponseEntity.ok("fuck计数已增加，当前值: " + user.getFuck());
+            
+        } catch (Exception e) {
+            log.error("增加fuck计数失败", e);
+            return ResponseEntity.internalServerError().body("操作失败");
         }
     }
     
