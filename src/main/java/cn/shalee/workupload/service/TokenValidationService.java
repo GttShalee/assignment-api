@@ -32,35 +32,45 @@ public class TokenValidationService {
             }
             
             // 2. 获取用户信息
-            String userEmail = jwtTokenProvider.getUsernameFromToken(token);
-            User user = userRepository.findByEmail(userEmail)
-                    .orElse(null);
+            String subjectValue = jwtTokenProvider.getUsernameFromToken(token); // 可能是学号或邮箱（向后兼容）
+            User user = null;
+            
+            // 先尝试作为学号查找
+            user = userRepository.findByStudentId(subjectValue).orElse(null);
+            
+            // 如果找不到，尝试作为邮箱查找（向后兼容旧token）
+            if (user == null) {
+                user = userRepository.findByEmail(subjectValue).orElse(null);
+                if (user != null) {
+                    log.info("检测到旧版本token（使用邮箱作为subject），建议用户重新登录: email={}", subjectValue);
+                }
+            }
             
             if (user == null) {
-                log.warn("Token中的用户不存在: email={}", userEmail);
+                log.warn("Token中的用户不存在: subject={}", subjectValue);
                 return false;
             }
             
             // 3. 检查用户状态
             if (!user.getStatus()) {
-                log.warn("用户账户已被禁用: email={}", userEmail);
+                log.warn("用户账户已被禁用: studentId={}", user.getStudentId());
                 return false;
             }
             
             // 4. 检查单点登录限制
             String tokenId = jwtTokenProvider.getTokenIdFromToken(token);
             if (tokenId == null) {
-                log.warn("Token中缺少tokenId: email={}", userEmail);
+                log.warn("Token中缺少tokenId: studentId={}", user.getStudentId());
                 return false;
             }
             
             if (!tokenId.equals(user.getCurrentTokenId())) {
-                log.warn("Token已失效（用户在其他设备登录）: email={}, currentTokenId={}, tokenId={}", 
-                        userEmail, user.getCurrentTokenId(), tokenId);
+                log.warn("Token已失效（用户在其他设备登录）: studentId={}, currentTokenId={}, tokenId={}", 
+                        user.getStudentId(), user.getCurrentTokenId(), tokenId);
                 return false;
             }
             
-            log.debug("Token验证成功: email={}", userEmail);
+            log.debug("Token验证成功: studentId={}", user.getStudentId());
             return true;
             
         } catch (Exception e) {

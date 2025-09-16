@@ -11,18 +11,17 @@ import cn.shalee.workupload.security.JwtTokenProvider;
 import cn.shalee.workupload.service.AuthService;
 import cn.shalee.workupload.service.TokenValidationService;
 import cn.shalee.workupload.service.VerificationCodeService;
+import cn.shalee.workupload.util.StoragePaths;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import cn.shalee.workupload.util.StoragePaths;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 
 /**
@@ -73,7 +72,7 @@ public class AuthServiceImpl implements AuthService {
                 .realName(user.getRealName())
                 .studentId(user.getStudentId())
                 .roleType(user.getRoleType())
-                .expireTime(LocalDateTime.now().plusHours(2)) // 假设token有效期2小时
+                .expireTime(LocalDateTime.now().plusHours(6)) // 假设token有效期2小时
                 .build();
     }
 
@@ -177,5 +176,35 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
         
         log.info("用户密码更新成功: email={}", email);
+    }
+    
+    @Override
+    public String updateEmail(String currentEmail, String newEmail) {
+        // 1. 验证新邮箱格式
+        if (!newEmail.matches("^\\w+([-+.]\\w+)*@\\w+([-.]\\w+)*\\.\\w+([-.]\\w+)*$")) {
+            throw new BusinessException("EMAIL-001", "邮箱格式不正确");
+        }
+        
+        // 2. 验证用户是否存在
+        User user = userRepository.findByEmail(currentEmail)
+                .orElseThrow(() -> new BusinessException("AUTH-001", "用户不存在"));
+        
+        // 3. 检查新邮箱是否已被其他用户使用
+        if (userRepository.existsByEmail(newEmail)) {
+            throw new BusinessException("EMAIL-002", "该邮箱已被其他用户使用");
+        }
+        
+        // 4. 检查新邮箱是否与学号相同
+        if (newEmail.equals(user.getStudentId())) {
+            throw new BusinessException("EMAIL-003", "新邮箱不能与学号相同");
+        }
+        
+        // 5. 更新用户邮箱
+        String oldEmail = user.getEmail();
+        user.setEmail(newEmail);
+        userRepository.save(user);
+        
+        log.info("用户邮箱更新成功: userId={}, oldEmail={}, newEmail={}", user.getId(), oldEmail, newEmail);
+        return newEmail;
     }
 }

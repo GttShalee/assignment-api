@@ -44,4 +44,12 @@ public interface AuthService {
      * @param verificationCode 验证码
      */
     void changePassword(String email, String newPassword, String verificationCode);
+    
+    /**
+     * 更新邮箱
+     * @param currentEmail 当前用户邮箱
+     * @param newEmail 新邮箱
+     * @return 更新后的邮箱
+     */
+    String updateEmail(String currentEmail, String newEmail);
 }

@@ -18,9 +18,22 @@ public class CustomUserDetailsService implements UserDetailsService {
     }
 
     @Override
-    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        User user = (User) userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("用户不存在: " + email));
+    public UserDetails loadUserByUsername(String subjectValue) throws UsernameNotFoundException {
+        // subjectValue可能是学号或邮箱（向后兼容）
+        User user = null;
+        
+        // 先尝试作为学号查找
+        user = userRepository.findByStudentId(subjectValue).orElse(null);
+        
+        // 如果找不到，尝试作为邮箱查找（向后兼容旧token）
+        if (user == null) {
+            user = userRepository.findByEmail(subjectValue).orElse(null);
+        }
+        
+        if (user == null) {
+            throw new UsernameNotFoundException("用户不存在: " + subjectValue);
+        }
+        
         return new CustomUserDetails(user);
     }
 } 

@@ -3,6 +3,7 @@ package cn.shalee.workupload.controller;
 import cn.shalee.workupload.dto.request.EmailLoginRequest;
 import cn.shalee.workupload.dto.request.LoginRequest;
 import cn.shalee.workupload.dto.request.RegisterRequest;
+import cn.shalee.workupload.dto.request.UpdateEmailRequest;
 import cn.shalee.workupload.dto.response.LoginResponse;
 import cn.shalee.workupload.dto.response.UserInfoResponse;
 import cn.shalee.workupload.entity.User;
@@ -178,13 +179,18 @@ public class AuthController {
                 return ResponseEntity.status(401).body(null);
             }
 
-            // 获取用户邮箱（JWT 中的 subject）
-            String email = authentication.getName();
-            log.info("获取当前用户信息: email={}", email);
+            // 获取JWT中的subject（可能是学号或邮箱）
+            String subjectValue = authentication.getName();
+            log.info("获取当前用户信息: subject={}", subjectValue);
 
-            // 从数据库获取完整用户信息
-            User user = userRepository.findByEmail(email)
-                    .orElseThrow(() -> new RuntimeException("用户不存在"));
+            // 从数据库获取完整用户信息（先尝试学号，再尝试邮箱）
+            User user = userRepository.findByStudentId(subjectValue).orElse(null);
+            if (user == null) {
+                user = userRepository.findByEmail(subjectValue).orElse(null);
+            }
+            if (user == null) {
+                throw new RuntimeException("用户不存在");
+            }
 
             // 构建用户信息响应
             UserInfoResponse userInfo = UserInfoResponse.builder()
@@ -223,17 +229,26 @@ public class AuthController {
                 return ResponseEntity.ok("已登出");
             }
 
-            // 获取用户邮箱
-            String email = authentication.getName();
-            log.info("用户登出: email={}", email);
+            // 获取JWT中的subject（可能是学号或邮箱）
+            String subjectValue = authentication.getName();
+            log.info("用户登出: subject={}", subjectValue);
+            
+            // 从数据库获取用户信息
+            User user = userRepository.findByStudentId(subjectValue).orElse(null);
+            if (user == null) {
+                user = userRepository.findByEmail(subjectValue).orElse(null);
+            }
+            if (user == null) {
+                throw new RuntimeException("用户不存在");
+            }
             
             // 清除用户的token ID
-            tokenValidationService.clearUserTokenId(email);
+            tokenValidationService.clearUserTokenId(user.getEmail());
             
             // 清除SecurityContext
             SecurityContextHolder.clearContext();
             
-            log.info("用户登出成功: email={}", email);
+            log.info("用户登出成功: studentId={}", user.getStudentId());
             return ResponseEntity.ok("登出成功");
             
         } catch (Exception e) {
@@ -255,18 +270,23 @@ public class AuthController {
                 return ResponseEntity.status(401).body("未登录");
             }
 
-            // 获取用户邮箱
-            String email = authentication.getName();
-            log.info("用户更换头像: email={}", email);
+            // 获取JWT中的subject（可能是学号或邮箱）
+            String subjectValue = authentication.getName();
+            log.info("用户更换头像: subject={}", subjectValue);
 
             // 从数据库获取用户信息
-            User user = userRepository.findByEmail(email)
-                    .orElseThrow(() -> new RuntimeException("用户不存在"));
+            User user = userRepository.findByStudentId(subjectValue).orElse(null);
+            if (user == null) {
+                user = userRepository.findByEmail(subjectValue).orElse(null);
+            }
+            if (user == null) {
+                throw new RuntimeException("用户不存在");
+            }
 
             // 调用服务层处理头像上传
             String avatarUrl = authService.changeAvatar(user, file);
             
-            log.info("用户头像更换成功: email={}, avatarUrl={}", email, avatarUrl);
+            log.info("用户头像更换成功: studentId={}, avatarUrl={}", user.getStudentId(), avatarUrl);
             return ResponseEntity.ok(avatarUrl);
             
         } catch (Exception e) {
@@ -288,9 +308,19 @@ public class AuthController {
                 return ResponseEntity.status(401).body("未登录");
             }
 
-            // 获取用户邮箱
-            String email = authentication.getName();
-            log.info("用户更新密码: email={}", email);
+            // 获取JWT中的subject（可能是学号或邮箱）
+            String subjectValue = authentication.getName();
+            log.info("用户更新密码: subject={}", subjectValue);
+            
+            // 从数据库获取用户信息
+            User user = userRepository.findByStudentId(subjectValue).orElse(null);
+            if (user == null) {
+                user = userRepository.findByEmail(subjectValue).orElse(null);
+            }
+            if (user == null) {
+                throw new RuntimeException("用户不存在");
+            }
+            String email = user.getEmail();
 
             String oldPassword = request.get("oldPassword");
             String newPassword = request.get("newPassword");
@@ -309,6 +339,62 @@ public class AuthController {
         } catch (Exception e) {
             log.error("更新密码失败: {}", e.getMessage());
             return ResponseEntity.internalServerError().body("更新密码失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 更新邮箱
+     */
+    @PostMapping("/update-email")
+    public ResponseEntity<?> updateEmail(@Valid @RequestBody UpdateEmailRequest request) {
+        try {
+            // 从 SecurityContext 获取当前认证信息
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body(Map.of("message", "未授权访问"));
+            }
+
+            // 获取JWT中的subject（可能是学号或邮箱）
+            String subjectValue = authentication.getName();
+            
+            // 从数据库获取当前用户信息
+            User user = userRepository.findByStudentId(subjectValue).orElse(null);
+            if (user == null) {
+                user = userRepository.findByEmail(subjectValue).orElse(null);
+            }
+            if (user == null) {
+                throw new RuntimeException("用户不存在");
+            }
+            String currentEmail = user.getEmail();
+            
+            log.info("用户更新邮箱: studentId={}, currentEmail={}, newEmail={}", user.getStudentId(), currentEmail, request.getNewEmail());
+
+            // 调用服务层处理邮箱更新
+            String updatedEmail = authService.updateEmail(currentEmail, request.getNewEmail());
+            
+            log.info("用户邮箱更新成功: currentEmail={}, newEmail={}", currentEmail, updatedEmail);
+            
+            // 返回成功响应
+            return ResponseEntity.ok(Map.of(
+                "message", "邮箱更新成功",
+                "data", Map.of("email", updatedEmail)
+            ));
+            
+        } catch (Exception e) {
+            log.error("更新邮箱失败: {}", e.getMessage());
+            
+            // 根据异常类型返回不同的错误响应
+            String errorMessage = e.getMessage();
+            if (errorMessage.contains("邮箱格式不正确")) {
+                return ResponseEntity.status(400).body(Map.of("message", "邮箱格式不正确"));
+            } else if (errorMessage.contains("该邮箱已被其他用户使用")) {
+                return ResponseEntity.status(409).body(Map.of("message", "该邮箱已被其他用户使用"));
+            } else if (errorMessage.contains("新邮箱不能与学号相同")) {
+                return ResponseEntity.status(400).body(Map.of("message", "新邮箱不能与学号相同"));
+            } else {
+                return ResponseEntity.status(500).body(Map.of("message", "更新邮箱失败: " + errorMessage));
+            }
         }
     }
 }

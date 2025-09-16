@@ -97,14 +97,23 @@ public class HomeworkSubmissionController {
                 // 保存文件
                 Files.copy(file.getInputStream(), filePath);
                 
-
+                // 检查文件名是否被修改（添加了时间戳前缀）
+                boolean filenameModified = !filename.equals(originalFilename);
+                if (filenameModified) {
+                    // 文件名被修改，增加fuck计数
+                    Integer currentFuck = user.getFuck() != null ? user.getFuck() : 0;
+                    user.setFuck(currentFuck + 1);
+                    userRepository.save(user);
+                    log.info("用户文件名不规范，增加fuck计数: userId={}, studentId={}, fuck={}", 
+                            user.getId(), user.getStudentId(), user.getFuck());
+                }
                 
                 String fileUrl = "/uploads/homework/" + folderName + "/" + filename;
                 request.setSubmissionFileUrl(fileUrl);
                 request.setSubmissionFileName(originalFilename);
                 
                 log.info("作业文件上传成功: url={}, originalName={}, folder={}, filenameModified={}", 
-                        fileUrl, originalFilename, folderName);
+                        fileUrl, originalFilename, folderName, filenameModified);
                 
             } catch (IOException e) {
                 log.error("作业文件上传失败", e);
@@ -208,9 +217,8 @@ public class HomeworkSubmissionController {
     @GetMapping("/list/{homeworkId}")
     public ResponseEntity<Page<HomeworkSubmissionResponse>> getHomeworkSubmissionList(
             @PathVariable Long homeworkId,
-
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "52") int pageSize) {
+            @RequestParam(defaultValue = "10") int pageSize) {
         
         // 获取当前登录用户信息
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -257,34 +265,6 @@ public class HomeworkSubmissionController {
         } catch (Exception e) {
             log.error("下载作业提交包失败: homeworkId={}, error={}", homeworkId, e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
-        }
-    }
-    
-    /**
-     * 增加用户fuck计数
-     */
-    @PostMapping("/increase-fuck")
-    public ResponseEntity<String> increaseFuckCount(Authentication authentication) {
-        try {
-            String userEmail = authentication.getName();
-            User user = homeworkSubmissionService.getUserByEmail(userEmail);
-            
-            if (user == null) {
-                return ResponseEntity.badRequest().body("用户不存在");
-            }
-            
-            Integer currentFuck = user.getFuck() != null ? user.getFuck() : 0;
-            user.setFuck(currentFuck + 1);
-            userRepository.save(user);
-            
-            log.info("手动增加用户fuck计数: userId={}, studentId={}, fuck={}", 
-                    user.getId(), user.getStudentId(), user.getFuck());
-            
-            return ResponseEntity.ok("fuck计数已增加，当前值: " + user.getFuck());
-            
-        } catch (Exception e) {
-            log.error("增加fuck计数失败", e);
-            return ResponseEntity.internalServerError().body("操作失败");
         }
     }
     

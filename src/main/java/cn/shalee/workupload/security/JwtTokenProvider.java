@@ -26,8 +26,7 @@ public class JwtTokenProvider {
         String tokenId = UUID.randomUUID().toString();
         
         return Jwts.builder()
-                .setSubject(user.getEmail())
-                .claim("userId", user.getId())
+                .setSubject(user.getStudentId()) // 使用学号作为subject
                 .claim("role", user.getRoleType())
                 .claim("tokenId", tokenId)
                 .setIssuedAt(new Date())
@@ -64,23 +63,14 @@ public class JwtTokenProvider {
                 .getBody();
     }
 
-    // 获取JWT中的用户名（即subject，通常是email）
+    // 获取JWT中的学号（作为username使用）
     public String getUsernameFromToken(String token) {
-        return getClaimsFromToken(token).getSubject();
+        return getClaimsFromToken(token).getSubject(); // 现在subject是学号
     }
 
-    // 可选：获取用户ID
-    public Long getUserIdFromToken(String token) {
-        Claims claims = getClaimsFromToken(token);
-        Object userId = claims.get("userId");
-        if (userId instanceof Integer) {
-            return ((Integer) userId).longValue();
-        } else if (userId instanceof Long) {
-            return (Long) userId;
-        } else if (userId instanceof String) {
-            return Long.parseLong((String) userId);
-        }
-        return null;
+    // 获取学号
+    public String getStudentIdFromToken(String token) {
+        return getClaimsFromToken(token).getSubject();
     }
     
     /**
