@@ -34,6 +34,7 @@ public class HomeworkService {
     private final HomeworkRepository homeworkRepository;
     private final UserRepository userRepository;
     private final HomeworkLogRepository homeworkLogRepository;
+    private final HomeworkEmailNotificationService emailNotificationService;
     
     public HomeworkResponse createHomework(CreateHomeworkRequest request, String userEmail) {
         log.info("创建作业: title={}, classCode={}, userEmail={}", request.getTitle(), request.getClassCode(), userEmail);
@@ -67,6 +68,9 @@ public class HomeworkService {
         
         // 为班级所有学生创建初始作业日志记录
         createInitialHomeworkLogs(savedHomework);
+        
+        // 异步发送作业发布邮件通知
+        emailNotificationService.sendHomeworkPublishedNotifications(savedHomework);
         
         return convertToResponse(savedHomework);
     }

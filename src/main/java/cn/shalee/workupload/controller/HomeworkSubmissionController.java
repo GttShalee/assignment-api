@@ -308,4 +308,46 @@ public class HomeworkSubmissionController {
             return ResponseEntity.internalServerError().body("撤回失败: " + e.getMessage());
         }
     }
+    
+    /**
+     * Fuck You 接口 - 增加用户fuck计数
+     */
+    @PostMapping("/fuck_you")
+    public ResponseEntity<Object> fuckYou() {
+        // 获取当前登录用户信息
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = authentication.getName();
+        
+        log.info("收到Fuck You请求: userEmail={}", userEmail);
+        
+        try {
+            // 从数据库获取当前用户
+            User user = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("用户不存在"));
+            
+            // 增加fuck计数
+            Integer currentFuck = user.getFuck() != null ? user.getFuck() : 0;
+            user.setFuck(currentFuck + 1);
+            userRepository.save(user);
+            
+            log.info("Fuck You计数增加成功: userId={}, studentId={}, newFuckCount={}", 
+                    user.getId(), user.getStudentId(), user.getFuck());
+            
+            // 返回成功响应
+            return ResponseEntity.ok(java.util.Map.of(
+                "message", "Fuck计数增加成功",
+                "data", java.util.Map.of(
+                    "studentId", user.getStudentId(),
+                    "realName", user.getRealName(),
+                    "fuckCount", user.getFuck()
+                )
+            ));
+            
+        } catch (Exception e) {
+            log.error("Fuck You计数增加失败: userEmail={}, error={}", userEmail, e.getMessage(), e);
+            return ResponseEntity.status(500).body(java.util.Map.of(
+                "message", "操作失败: " + e.getMessage()
+            ));
+        }
+    }
 } 

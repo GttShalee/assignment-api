@@ -37,6 +37,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/homework-submission/**").authenticated()
                         .requestMatchers("/api/class/**").authenticated()
                         .requestMatchers("/api/upload/**").authenticated()
+                        .requestMatchers("/api/admin/**").authenticated()  // 管理员接口需要认证
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)

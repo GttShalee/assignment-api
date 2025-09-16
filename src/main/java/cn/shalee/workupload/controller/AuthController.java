@@ -355,7 +355,7 @@ public class AuthController {
                 return ResponseEntity.status(401).body(Map.of("message", "未授权访问"));
             }
 
-            // 获取JWT中的subject（可能是学号或邮箱）
+            // 获取JWT中的subject（学号）
             String subjectValue = authentication.getName();
             
             // 从数据库获取当前用户信息
