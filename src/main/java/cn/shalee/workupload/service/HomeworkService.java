@@ -50,6 +50,7 @@ public class HomeworkService {
         
         Homework homework = Homework.builder()
                 .classCode(request.getClassCode())
+                .courseName(request.getCourseName())
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .attachmentUrl(request.getAttachmentUrl())
@@ -116,11 +117,12 @@ public class HomeworkService {
                 log.info("创建基础目录: {}", baseDir.getAbsolutePath());
             }
             
-            // 生成文件夹名称：班级-作业名称-日期
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            // 生成文件夹名称：班级-作业名称-日期（使用作业发布时间确保一致性）
+            String timestamp = homework.getPublishTime().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
             String folderName = homework.getClassCode() + "-" + homework.getTitle() + "-" + timestamp;
             
-            // 处理文件夹名称中的特殊字符
+            // 保留中文字符，只替换可能导致文件系统问题的特殊字符
+            // 替换文件系统不支持的字符：\ / : * ? " < > |
             folderName = folderName.replaceAll("[\\\\/:*?\"<>|]", "_");
             
             File homeworkFolder = new File(baseDir, folderName);
@@ -240,6 +242,9 @@ public class HomeworkService {
         if (request.getClassCode() != null && !request.getClassCode().trim().isEmpty()) {
             homework.setClassCode(request.getClassCode());
         }
+        if (request.getCourseName() != null) {
+            homework.setCourseName(request.getCourseName());
+        }
         if (request.getTitle() != null && !request.getTitle().trim().isEmpty()) {
             homework.setTitle(request.getTitle());
         }
@@ -321,6 +326,7 @@ public class HomeworkService {
         return HomeworkResponse.builder()
                 .id(homework.getId())
                 .classCode(homework.getClassCode())
+                .courseName(homework.getCourseName())
                 .title(homework.getTitle())
                 .description(homework.getDescription())
                 .attachmentUrl(homework.getAttachmentUrl())

@@ -18,6 +18,9 @@ public class CreateHomeworkRequest {
     @JsonProperty("class_code")
     private String classCode;
     
+    @JsonProperty("course_name")
+    private String courseName;
+    
     @NotBlank(message = "作业标题不能为空")
     private String title;
     

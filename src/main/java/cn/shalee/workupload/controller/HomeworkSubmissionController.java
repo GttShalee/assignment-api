@@ -4,6 +4,7 @@ import cn.shalee.workupload.dto.request.GradeHomeworkRequest;
 import cn.shalee.workupload.dto.request.SubmitHomeworkRequest;
 import cn.shalee.workupload.dto.response.HomeworkSubmissionResponse;
 import cn.shalee.workupload.dto.response.UnsubmittedMemberResponse;
+import cn.shalee.workupload.dto.response.UserSubmissionHistoryResponse;
 import cn.shalee.workupload.entity.Homework;
 import cn.shalee.workupload.entity.User;
 import cn.shalee.workupload.repository.UserRepository;
@@ -71,9 +72,7 @@ public class HomeworkSubmissionController {
                 }
                 
                 // 构建作业文件夹路径：uploads/homework/班级代码-作业名称-日期/
-                String timestamp = homework.getPublishTime().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-                String folderName = homework.getClassCode() + "-" + homework.getTitle() + "-" + timestamp;
-                folderName = folderName.replaceAll("[\\\\/:*?\"<>|]", "_");
+                String folderName = generateHomeworkFolderName(homework);
                 
                 Path uploadPath = Paths.get("uploads/homework/" + folderName);
                 if (!Files.exists(uploadPath)) {
@@ -133,6 +132,17 @@ public class HomeworkSubmissionController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         
+        // 参数验证
+        if (page < 1) {
+            page = 1;
+        }
+        if (pageSize < 1) {
+            pageSize = 10;
+        }
+        if (pageSize > 100) {
+            pageSize = 100; // 限制最大页面大小
+        }
+        
         // 获取当前登录用户信息
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String userEmail = authentication.getName();
@@ -140,6 +150,35 @@ public class HomeworkSubmissionController {
         log.info("收到获取我的作业提交列表请求: userEmail={}, page={}, pageSize={}", userEmail, page, pageSize);
         
         Page<HomeworkSubmissionResponse> response = homeworkSubmissionService.getMySubmissions(userEmail, page, pageSize);
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 获取用户历史提交记录
+     */
+    @GetMapping("/my/history")
+    public ResponseEntity<Page<UserSubmissionHistoryResponse>> getUserSubmissionHistory(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        
+        // 参数验证
+        if (page < 1) {
+            page = 1;
+        }
+        if (pageSize < 1) {
+            pageSize = 10;
+        }
+        if (pageSize > 100) {
+            pageSize = 100; // 限制最大页面大小
+        }
+        
+        // 获取当前登录用户信息
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = authentication.getName();
+        
+        log.info("收到获取用户历史提交记录请求: userEmail={}, page={}, pageSize={}", userEmail, page, pageSize);
+        
+        Page<UserSubmissionHistoryResponse> response = homeworkSubmissionService.getUserSubmissionHistory(userEmail, page, pageSize);
         return ResponseEntity.ok(response);
     }
     
@@ -166,6 +205,17 @@ public class HomeworkSubmissionController {
             @PathVariable Long homeworkId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
+        
+        // 参数验证
+        if (page < 1) {
+            page = 1;
+        }
+        if (pageSize < 1) {
+            pageSize = 10;
+        }
+        if (pageSize > 100) {
+            pageSize = 100; // 限制最大页面大小
+        }
         
         // 获取当前登录用户信息
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -219,6 +269,17 @@ public class HomeworkSubmissionController {
             @PathVariable Long homeworkId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
+        
+        // 参数验证
+        if (page < 1) {
+            page = 1;
+        }
+        if (pageSize < 1) {
+            pageSize = 10;
+        }
+        if (pageSize > 100) {
+            pageSize = 100; // 限制最大页面大小
+        }
         
         // 获取当前登录用户信息
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -349,5 +410,76 @@ public class HomeworkSubmissionController {
                 "message", "操作失败: " + e.getMessage()
             ));
         }
+    }
+    
+    /**
+     * 下载作业提交文件
+     */
+    @GetMapping("/download/{submissionId}")
+    public ResponseEntity<byte[]> downloadSubmissionFile(@PathVariable Long submissionId) {
+        try {
+            // 获取当前登录用户信息
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userEmail = authentication.getName();
+            
+            log.info("收到下载作业提交文件请求: submissionId={}, userEmail={}", submissionId, userEmail);
+            
+            // 获取提交记录
+            HomeworkSubmissionResponse submission = homeworkSubmissionService.getSubmissionDetail(submissionId, userEmail);
+            
+            if (submission.getSubmissionFileUrl() == null || submission.getSubmissionFileUrl().isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // 构建文件路径
+            String fileUrl = submission.getSubmissionFileUrl();
+            if (fileUrl.startsWith("/")) {
+                fileUrl = fileUrl.substring(1); // 移除开头的斜杠
+            }
+            
+            Path filePath = Paths.get(fileUrl);
+            if (!Files.exists(filePath)) {
+                log.warn("文件不存在: {}", filePath.toAbsolutePath());
+                return ResponseEntity.notFound().build();
+            }
+            
+            // 设置响应头
+            String fileName = submission.getSubmissionFileName() != null ? 
+                submission.getSubmissionFileName() : filePath.getFileName().toString();
+            
+            String contentType = Files.probeContentType(filePath);
+            if (contentType == null) {
+                contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+            }
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(contentType));
+            headers.setContentDispositionFormData("attachment", fileName);
+            headers.setContentLength(Files.size(filePath));
+            
+            log.info("文件下载成功: submissionId={}, fileName={}, size={} bytes", 
+                    submissionId, fileName, Files.size(filePath));
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(Files.readAllBytes(filePath));
+                    
+        } catch (Exception e) {
+            log.error("下载作业提交文件失败: submissionId={}, error={}", submissionId, e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    /**
+     * 生成作业文件夹名称
+     * 确保与HomeworkService中的逻辑一致
+     */
+    private String generateHomeworkFolderName(Homework homework) {
+        String timestamp = homework.getPublishTime().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String folderName = homework.getClassCode() + "-" + homework.getTitle() + "-" + timestamp;
+        // 保留中文字符，只替换可能导致文件系统问题的特殊字符
+        // 替换文件系统不支持的字符：\ / : * ? " < > |
+        folderName = folderName.replaceAll("[\\\\/:*?\"<>|]", "_");
+        return folderName;
     }
 } 

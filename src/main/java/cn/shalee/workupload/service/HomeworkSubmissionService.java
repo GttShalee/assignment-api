@@ -4,6 +4,7 @@ import cn.shalee.workupload.dto.request.GradeHomeworkRequest;
 import cn.shalee.workupload.dto.request.SubmitHomeworkRequest;
 import cn.shalee.workupload.dto.response.HomeworkSubmissionResponse;
 import cn.shalee.workupload.dto.response.UnsubmittedMemberResponse;
+import cn.shalee.workupload.dto.response.UserSubmissionHistoryResponse;
 import cn.shalee.workupload.entity.Homework;
 import cn.shalee.workupload.entity.HomeworkLog;
 import cn.shalee.workupload.entity.HomeworkSubmission;
@@ -143,12 +144,47 @@ public class HomeworkSubmissionService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new BusinessException("USER-001", "用户不存在"));
         
-        Pageable pageable = PageRequest.of(page - 1, pageSize);
+        // 确保页码至少为1，然后转换为0基索引
+        int pageIndex = Math.max(1, page) - 1;
+        Pageable pageable = PageRequest.of(pageIndex, pageSize);
         Page<HomeworkSubmission> submissionPage = homeworkSubmissionRepository.findByStudentId(user.getStudentId(), pageable);
         
         return submissionPage.map(submission -> {
             Homework homework = homeworkRepository.findById(submission.getHomeworkId()).orElse(null);
             return convertToResponse(submission, user, homework);
+        });
+    }
+    
+    /**
+     * 获取用户历史提交记录
+     */
+    public Page<UserSubmissionHistoryResponse> getUserSubmissionHistory(String userEmail, int page, int pageSize) {
+        log.info("获取用户历史提交记录: userEmail={}, page={}, pageSize={}", userEmail, page, pageSize);
+        
+        // 获取用户信息
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new BusinessException("USER-001", "用户不存在"));
+        
+        // 确保页码至少为1，然后转换为0基索引
+        int pageIndex = Math.max(1, page) - 1;
+        Pageable pageable = PageRequest.of(pageIndex, pageSize);
+        Page<HomeworkSubmission> submissionPage = homeworkSubmissionRepository.findByStudentId(user.getStudentId(), pageable);
+        
+        return submissionPage.map(submission -> {
+            // 获取作业信息以获取课程名称
+            Homework homework = homeworkRepository.findById(submission.getHomeworkId()).orElse(null);
+            
+            return UserSubmissionHistoryResponse.builder()
+                    .id(submission.getId())
+                    .homeworkId(submission.getHomeworkId())
+                    .homeworkTitle(homework != null ? homework.getTitle() : "未知作业")
+                    .courseName(homework != null ? homework.getCourseName() : "未知课程")
+                    .submissionTime(submission.getSubmissionTime())
+                    .submissionFileUrl(submission.getSubmissionFileUrl())
+                    .submissionFileName(submission.getSubmissionFileName())
+                    .downloadUrl("/api/homework-submission/download/" + submission.getId()) // 使用专用下载接口
+                    .submissionStatus(submission.getSubmissionStatus())
+                    .build();
         });
     }
     
@@ -195,7 +231,9 @@ public class HomeworkSubmissionService {
                 .orElseThrow(() -> new BusinessException("HOMEWORK-001", "作业不存在"));
         
         // 如果是学委，只能查看本班级的提交记录
-        Pageable pageable = PageRequest.of(page - 1, pageSize);
+        // 确保页码至少为1，然后转换为0基索引
+        int pageIndex = Math.max(1, page) - 1;
+        Pageable pageable = PageRequest.of(pageIndex, pageSize);
         Page<HomeworkSubmission> submissionPage;
         
         if (user.getRoleType() == 2) {

@@ -20,6 +20,8 @@ public class HomeworkResponse {
     private Long id;
     @JsonProperty("class_code")
     private String classCode;
+    @JsonProperty("course_name")
+    private String courseName;
     private String title;
     private String description;
     @JsonProperty("attachment_url")
