@@ -5,6 +5,7 @@ import cn.shalee.workupload.entity.Homework;
 import cn.shalee.workupload.entity.User;
 import cn.shalee.workupload.repository.EmailNotificationLogRepository;
 import cn.shalee.workupload.repository.UserRepository;
+import cn.shalee.workupload.util.CourseUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -26,20 +27,47 @@ public class HomeworkEmailNotificationService {
     private final EmailNotificationLogRepository emailNotificationLogRepository;
     
     /**
-     * 异步发送作业发布通知（给所有班级学生）
+     * 异步发送作业发布通知（给选了该课程的班级学生）
      */
     @Async
     public void sendHomeworkPublishedNotifications(Homework homework) {
-        log.info("开始发送作业发布通知: homeworkId={}, classCode={}", homework.getId(), homework.getClassCode());
+        log.info("开始发送作业发布通知: homeworkId={}, classCode={}, courseCode={}", 
+                homework.getId(), homework.getClassCode(), homework.getCourseCode());
         
         // 获取班级所有学生 (role_type = 1)
-        List<User> students = userRepository.findByClassCodeAndRoleType(homework.getClassCode(), 1);
-        log.info("班级学生数量: {}", students.size());
+        List<User> allStudents = userRepository.findByClassCodeAndRoleType(homework.getClassCode(), 1);
+        log.info("班级学生总数: {}", allStudents.size());
+        
+        // 过滤出选了该课程的学生
+        List<User> targetStudents = allStudents.stream()
+                .filter(student -> {
+                    Integer studentCourses = student.getCourses();
+                    if (studentCourses == null || studentCourses == 0) {
+                        log.debug("学生未选课，跳过邮件发送: studentId={}", student.getStudentId());
+                        return false;
+                    }
+                    
+                    Integer homeworkCourseCode = homework.getCourseCode();
+                    if (homeworkCourseCode == null || homeworkCourseCode == 0) {
+                        log.debug("作业未指定课程代码，发送给所有学生: homeworkId={}", homework.getId());
+                        return true;
+                    }
+                    
+                    boolean isSelected = CourseUtils.isCourseSelected(studentCourses, homeworkCourseCode);
+                    if (!isSelected) {
+                        log.debug("学生未选择该课程，跳过邮件发送: studentId={}, studentCourses={}, homeworkCourseCode={}", 
+                                student.getStudentId(), studentCourses, homeworkCourseCode);
+                    }
+                    return isSelected;
+                })
+                .toList();
+        
+        log.info("选了该课程的学生数量: {} / {}", targetStudents.size(), allStudents.size());
         
         int successCount = 0;
         int failCount = 0;
         
-        for (User student : students) {
+        for (User student : targetStudents) {
             try {
                 // 检查是否已经发送过（防重复）
                 if (emailNotificationLogRepository.existsByHomeworkIdAndRecipientEmailAndEmailType(
@@ -73,20 +101,48 @@ public class HomeworkEmailNotificationService {
             }
         }
         
-        log.info("作业发布通知发送完成: homeworkId={}, 成功={}, 失败={}", homework.getId(), successCount, failCount);
+        log.info("作业发布通知发送完成: homeworkId={}, 目标学生={}, 成功={}, 失败={}", 
+                homework.getId(), targetStudents.size(), successCount, failCount);
     }
     
     /**
-     * 异步发送作业截止提醒（给未提交的学生）
+     * 异步发送作业截止提醒（给未提交且选了该课程的学生）
      */
     @Async
     public void sendHomeworkDeadlineNotifications(Homework homework, List<User> unsubmittedStudents) {
-        log.info("开始发送作业截止提醒: homeworkId={}, 未提交学生数量={}", homework.getId(), unsubmittedStudents.size());
+        log.info("开始发送作业截止提醒: homeworkId={}, courseCode={}, 未提交学生数量={}", 
+                homework.getId(), homework.getCourseCode(), unsubmittedStudents.size());
+        
+        // 过滤出选了该课程的未提交学生
+        List<User> targetStudents = unsubmittedStudents.stream()
+                .filter(student -> {
+                    Integer studentCourses = student.getCourses();
+                    if (studentCourses == null || studentCourses == 0) {
+                        log.debug("学生未选课，跳过截止提醒: studentId={}", student.getStudentId());
+                        return false;
+                    }
+                    
+                    Integer homeworkCourseCode = homework.getCourseCode();
+                    if (homeworkCourseCode == null || homeworkCourseCode == 0) {
+                        log.debug("作业未指定课程代码，发送给所有未提交学生: homeworkId={}", homework.getId());
+                        return true;
+                    }
+                    
+                    boolean isSelected = CourseUtils.isCourseSelected(studentCourses, homeworkCourseCode);
+                    if (!isSelected) {
+                        log.debug("学生未选择该课程，跳过截止提醒: studentId={}, studentCourses={}, homeworkCourseCode={}", 
+                                student.getStudentId(), studentCourses, homeworkCourseCode);
+                    }
+                    return isSelected;
+                })
+                .toList();
+        
+        log.info("选了该课程的未提交学生数量: {} / {}", targetStudents.size(), unsubmittedStudents.size());
         
         int successCount = 0;
         int failCount = 0;
         
-        for (User student : unsubmittedStudents) {
+        for (User student : targetStudents) {
             try {
                 // 检查是否已经发送过截止提醒（防重复）
                 if (emailNotificationLogRepository.existsByHomeworkIdAndRecipientEmailAndEmailType(
@@ -120,7 +176,8 @@ public class HomeworkEmailNotificationService {
             }
         }
         
-        log.info("作业截止提醒发送完成: homeworkId={}, 成功={}, 失败={}", homework.getId(), successCount, failCount);
+        log.info("作业截止提醒发送完成: homeworkId={}, 目标学生={}, 成功={}, 失败={}", 
+                homework.getId(), targetStudents.size(), successCount, failCount);
     }
     
     /**

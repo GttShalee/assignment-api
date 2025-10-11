@@ -25,7 +25,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 
 /**
- * @author 31930
+ * @author shalee
  */
 @Service
 @RequiredArgsConstructor
@@ -73,6 +73,7 @@ public class AuthServiceImpl implements AuthService {
                 .studentId(user.getStudentId())
                 .roleType(user.getRoleType())
                 .expireTime(LocalDateTime.now().plusHours(6)) // 假设token有效期2小时
+                .courses(user.getCourses())
                 .build();
     }
 

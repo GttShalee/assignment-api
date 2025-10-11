@@ -344,6 +344,32 @@ public class HomeworkSubmissionService {
     }
     
     /**
+     * 获取当前用户在指定作业下的提交记录
+     */
+    public HomeworkSubmissionResponse getMySubmissionByHomeworkId(Long homeworkId, String userEmail) {
+        log.info("获取我的作业提交: homeworkId={}, userEmail={}", homeworkId, userEmail);
+        
+        // 获取用户信息
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new BusinessException("USER-001", "用户不存在"));
+        
+        // 检查作业是否存在
+        Homework homework = homeworkRepository.findById(homeworkId)
+                .orElseThrow(() -> new BusinessException("HOMEWORK-001", "作业不存在"));
+        
+        // 查找用户的提交记录
+        Optional<HomeworkSubmission> submissionOpt = homeworkSubmissionRepository.findByStudentIdAndHomeworkId(user.getStudentId(), homeworkId);
+        
+        if (submissionOpt.isEmpty()) {
+            log.warn("用户未提交该作业: homeworkId={}, studentId={}", homeworkId, user.getStudentId());
+            return null;
+        }
+        
+        HomeworkSubmission submission = submissionOpt.get();
+        return convertToResponse(submission, user, homework);
+    }
+    
+    /**
      * 下载作业提交包
      */
     public byte[] downloadHomeworkSubmissions(Long homeworkId, String userEmail) throws IOException {

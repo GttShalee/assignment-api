@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -21,7 +22,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -268,7 +272,7 @@ public class HomeworkSubmissionController {
     public ResponseEntity<Page<HomeworkSubmissionResponse>> getHomeworkSubmissionList(
             @PathVariable Long homeworkId,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "100") int pageSize) {
         
         // 参数验证
         if (page < 1) {
@@ -413,59 +417,44 @@ public class HomeworkSubmissionController {
     }
     
     /**
-     * 下载作业提交文件
+     * 下载当前用户的作业提交文件 - 通过作业ID直接获取
      */
-    @GetMapping("/download/{submissionId}")
-    public ResponseEntity<byte[]> downloadSubmissionFile(@PathVariable Long submissionId) {
+    @GetMapping("/download/{homeworkId}")
+    public ResponseEntity<Void> downloadMyHomeworkFile(@PathVariable Long homeworkId, HttpServletRequest request) {
         try {
             // 获取当前登录用户信息
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             String userEmail = authentication.getName();
             
-            log.info("收到下载作业提交文件请求: submissionId={}, userEmail={}", submissionId, userEmail);
+            log.info("收到下载我的作业文件请求: homeworkId={}, userEmail={}", homeworkId, userEmail);
             
-            // 获取提交记录
-            HomeworkSubmissionResponse submission = homeworkSubmissionService.getSubmissionDetail(submissionId, userEmail);
+            // 获取当前用户在该作业下的提交记录
+            HomeworkSubmissionResponse submission = homeworkSubmissionService.getMySubmissionByHomeworkId(homeworkId, userEmail);
             
-            if (submission.getSubmissionFileUrl() == null || submission.getSubmissionFileUrl().isEmpty()) {
+            if (submission == null || submission.getSubmissionFileUrl() == null || submission.getSubmissionFileUrl().isEmpty()) {
+                log.warn("用户没有提交文件: homeworkId={}, userEmail={}", homeworkId, userEmail);
                 return ResponseEntity.notFound().build();
             }
             
-            // 构建文件路径
+            // 构建静态资源URL
             String fileUrl = submission.getSubmissionFileUrl();
-            if (fileUrl.startsWith("/")) {
-                fileUrl = fileUrl.substring(1); // 移除开头的斜杠
+            if (!fileUrl.startsWith("/")) {
+                fileUrl = "/" + fileUrl; // 确保以斜杠开头
             }
             
-            Path filePath = Paths.get(fileUrl);
-            if (!Files.exists(filePath)) {
-                log.warn("文件不存在: {}", filePath.toAbsolutePath());
-                return ResponseEntity.notFound().build();
-            }
+            // 构建完整的下载URL
+            String baseUrl = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
+            String downloadUrl = baseUrl + fileUrl;
             
-            // 设置响应头
-            String fileName = submission.getSubmissionFileName() != null ? 
-                submission.getSubmissionFileName() : filePath.getFileName().toString();
+            log.info("重定向到静态资源下载: homeworkId={}, userEmail={}, url={}", homeworkId, userEmail, downloadUrl);
             
-            String contentType = Files.probeContentType(filePath);
-            if (contentType == null) {
-                contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
-            }
-            
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType(contentType));
-            headers.setContentDispositionFormData("attachment", fileName);
-            headers.setContentLength(Files.size(filePath));
-            
-            log.info("文件下载成功: submissionId={}, fileName={}, size={} bytes", 
-                    submissionId, fileName, Files.size(filePath));
-            
-            return ResponseEntity.ok()
-                    .headers(headers)
-                    .body(Files.readAllBytes(filePath));
+            // 返回重定向响应
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(downloadUrl))
+                    .build();
                     
         } catch (Exception e) {
-            log.error("下载作业提交文件失败: submissionId={}, error={}", submissionId, e.getMessage(), e);
+            log.error("下载我的作业文件失败: homeworkId={}, error={}", homeworkId, e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
         }
     }

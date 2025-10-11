@@ -34,16 +34,19 @@ public class HomeworkController {
     @GetMapping
     public ResponseEntity<Page<HomeworkResponse>> getHomeworkList(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) String classCode,
+            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) Integer courses) {
         
         // 获取当前登录用户信息
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String userEmail = authentication.getName();
         
-        log.info("收到获取作业列表请求: userEmail={}, page={}, pageSize={}", 
-                userEmail, page, pageSize);
+        log.info("收到获取作业列表请求: userEmail={}, page={}, pageSize={}, classCode={}, status={}, courses={}", 
+                userEmail, page, pageSize, classCode, status, courses);
         
-        Page<HomeworkResponse> response = homeworkService.getHomeworkListByUser(userEmail, page, pageSize);
+        Page<HomeworkResponse> response = homeworkService.getHomeworkListByUser(userEmail, page, pageSize, classCode, status, courses);
         return ResponseEntity.ok(response);
     }
     

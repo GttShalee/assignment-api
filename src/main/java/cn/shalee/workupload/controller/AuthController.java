@@ -3,6 +3,7 @@ package cn.shalee.workupload.controller;
 import cn.shalee.workupload.dto.request.EmailLoginRequest;
 import cn.shalee.workupload.dto.request.LoginRequest;
 import cn.shalee.workupload.dto.request.RegisterRequest;
+import cn.shalee.workupload.dto.request.UpdateCoursesRequest;
 import cn.shalee.workupload.dto.request.UpdateEmailRequest;
 import cn.shalee.workupload.dto.response.LoginResponse;
 import cn.shalee.workupload.dto.response.UserInfoResponse;
@@ -395,6 +396,104 @@ public class AuthController {
             } else {
                 return ResponseEntity.status(500).body(Map.of("message", "更新邮箱失败: " + errorMessage));
             }
+        }
+    }
+    
+    /**
+     * 更新用户选课
+     */
+    @PostMapping("/update-courses")
+    public ResponseEntity<?> updateCourses(@Valid @RequestBody UpdateCoursesRequest request) {
+        log.info("收到更新选课请求: courses={}", request.getCourses());
+        
+        try {
+            // 从 SecurityContext 获取当前认证信息
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body(Map.of("message", "未授权访问"));
+            }
+
+            // 获取JWT中的subject（学号或邮箱）
+            String subjectValue = authentication.getName();
+            
+            // 从数据库获取当前用户信息
+            User user = userRepository.findByStudentId(subjectValue).orElse(null);
+            if (user == null) {
+                user = userRepository.findByEmail(subjectValue).orElse(null);
+            }
+            if (user == null) {
+                return ResponseEntity.status(404).body(Map.of("message", "用户不存在"));
+            }
+            
+            // 验证课程代码的有效性（可选，根据业务需求）
+            if (request.getCourses() < 0 || request.getCourses() > 127) { // 假设最多7门课程，2^7-1=127
+                return ResponseEntity.status(400).body(Map.of("message", "课程代码无效"));
+            }
+            
+            // 更新用户选课
+            user.setCourses(request.getCourses());
+            userRepository.save(user);
+            
+            log.info("用户选课更新成功: studentId={}, courses={}", user.getStudentId(), request.getCourses());
+            
+            return ResponseEntity.ok(Map.of(
+                "message", "选课更新成功",
+                "data", Map.of(
+                    "studentId", user.getStudentId(),
+                    "courses", user.getCourses()
+                )
+            ));
+            
+        } catch (Exception e) {
+            log.error("更新选课失败: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("message", "更新选课失败: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * 获取用户当前选课信息
+     */
+    @GetMapping("/courses")
+    public ResponseEntity<?> getUserCourses() {
+        log.info("获取用户选课信息");
+        
+        try {
+            // 从 SecurityContext 获取当前认证信息
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body(Map.of("message", "未授权访问"));
+            }
+
+            // 获取JWT中的subject（学号或邮箱）
+            String subjectValue = authentication.getName();
+            
+            // 从数据库获取当前用户信息
+            User user = userRepository.findByStudentId(subjectValue).orElse(null);
+            if (user == null) {
+                user = userRepository.findByEmail(subjectValue).orElse(null);
+            }
+            if (user == null) {
+                return ResponseEntity.status(404).body(Map.of("message", "用户不存在"));
+            }
+            
+            Integer courses = user.getCourses() != null ? user.getCourses() : 0;
+            
+            log.info("获取用户选课信息成功: studentId={}, courses={}", user.getStudentId(), courses);
+            
+            return ResponseEntity.ok(Map.of(
+                "message", "获取选课信息成功",
+                "data", Map.of(
+                    "studentId", user.getStudentId(),
+                    "courses", courses,
+                    "hasSelectedCourses", courses > 0
+                )
+            ));
+            
+        } catch (Exception e) {
+            log.error("获取选课信息失败: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("message", "获取选课信息失败: " + e.getMessage()));
         }
     }
 }

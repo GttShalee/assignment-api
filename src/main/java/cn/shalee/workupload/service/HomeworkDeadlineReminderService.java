@@ -6,6 +6,7 @@ import cn.shalee.workupload.entity.User;
 import cn.shalee.workupload.repository.HomeworkRepository;
 import cn.shalee.workupload.repository.HomeworkSubmissionRepository;
 import cn.shalee.workupload.repository.UserRepository;
+import cn.shalee.workupload.util.CourseUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -65,11 +66,35 @@ public class HomeworkDeadlineReminderService {
      * 处理单个作业的截止提醒
      */
     private void processHomeworkDeadlineReminder(Homework homework) {
-        log.info("处理作业截止提醒: homeworkId={}, title={}, deadline={}", 
-                homework.getId(), homework.getTitle(), homework.getDeadline());
+        log.info("处理作业截止提醒: homeworkId={}, title={}, courseCode={}, deadline={}", 
+                homework.getId(), homework.getTitle(), homework.getCourseCode(), homework.getDeadline());
         
         // 获取班级所有学生
         List<User> allStudents = userRepository.findByClassCodeAndRoleType(homework.getClassCode(), 1);
+        
+        // 先过滤出选了该课程的学生
+        List<User> enrolledStudents = allStudents.stream()
+                .filter(student -> {
+                    Integer studentCourses = student.getCourses();
+                    if (studentCourses == null || studentCourses == 0) {
+                        log.debug("学生未选课，不发送截止提醒: studentId={}", student.getStudentId());
+                        return false;
+                    }
+                    
+                    Integer homeworkCourseCode = homework.getCourseCode();
+                    if (homeworkCourseCode == null || homeworkCourseCode == 0) {
+                        log.debug("作业未指定课程代码，发送给所有学生: homeworkId={}", homework.getId());
+                        return true;
+                    }
+                    
+                    boolean isSelected = CourseUtils.isCourseSelected(studentCourses, homeworkCourseCode);
+                    if (!isSelected) {
+                        log.debug("学生未选择该课程，不发送截止提醒: studentId={}, studentCourses={}, homeworkCourseCode={}", 
+                                student.getStudentId(), studentCourses, homeworkCourseCode);
+                    }
+                    return isSelected;
+                })
+                .collect(Collectors.toList());
         
         // 获取已提交的学生学号
         List<HomeworkSubmission> submissions = homeworkSubmissionRepository.findByHomeworkId(homework.getId());
@@ -77,19 +102,20 @@ public class HomeworkDeadlineReminderService {
                 .map(HomeworkSubmission::getStudentId)
                 .collect(Collectors.toSet());
         
-        // 筛选出未提交的学生
-        List<User> unsubmittedStudents = allStudents.stream()
+        // 筛选出未提交且选了该课程的学生
+        List<User> unsubmittedStudents = enrolledStudents.stream()
                 .filter(student -> !submittedStudentIds.contains(student.getStudentId()))
                 .collect(Collectors.toList());
         
-        log.info("作业统计: homeworkId={}, 总学生数={}, 已提交={}, 未提交={}", 
-                homework.getId(), allStudents.size(), submittedStudentIds.size(), unsubmittedStudents.size());
+        log.info("作业统计: homeworkId={}, 总学生数={}, 选课学生数={}, 已提交={}, 未提交且选课={}", 
+                homework.getId(), allStudents.size(), enrolledStudents.size(), 
+                submittedStudentIds.size(), unsubmittedStudents.size());
         
         if (!unsubmittedStudents.isEmpty()) {
             // 异步发送截止提醒邮件
             emailNotificationService.sendHomeworkDeadlineNotifications(homework, unsubmittedStudents);
         } else {
-            log.info("所有学生都已提交作业，无需发送提醒: homeworkId={}", homework.getId());
+            log.info("所有选课学生都已提交作业，无需发送提醒: homeworkId={}", homework.getId());
         }
     }
     

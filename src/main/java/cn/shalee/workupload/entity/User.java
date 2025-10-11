@@ -60,4 +60,7 @@ public class User {
     
     @Column(name = "fuck", nullable = false)
     private Integer fuck; // 文件名不规范提交次数
+
+    @Column(name = "courses")
+    private Integer courses;  // 课程代码
 }

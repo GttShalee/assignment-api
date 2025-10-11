@@ -9,6 +9,7 @@ import cn.shalee.workupload.exception.BusinessException;
 import cn.shalee.workupload.repository.HomeworkLogRepository;
 import cn.shalee.workupload.repository.HomeworkRepository;
 import cn.shalee.workupload.repository.UserRepository;
+import cn.shalee.workupload.util.CourseUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -51,6 +52,7 @@ public class HomeworkService {
         Homework homework = Homework.builder()
                 .classCode(request.getClassCode())
                 .courseName(request.getCourseName())
+                .courseCode(request.getCourseCode())
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .attachmentUrl(request.getAttachmentUrl())
@@ -137,8 +139,9 @@ public class HomeworkService {
         }
     }
     
-    public Page<HomeworkResponse> getHomeworkListByUser(String userEmail, int page, int pageSize) {
-        log.info("根据用户获取作业列表: userEmail={}, page={}, pageSize={}", userEmail, page, pageSize);
+    public Page<HomeworkResponse> getHomeworkListByUser(String userEmail, int page, int pageSize, String classCode, Integer status, Integer courses) {
+        log.info("根据用户获取作业列表: userEmail={}, page={}, pageSize={}, classCode={}, status={}, courses={}", 
+                userEmail, page, pageSize, classCode, status, courses);
         
         // 获取用户信息
         User user = userRepository.findByEmail(userEmail)
@@ -149,19 +152,52 @@ public class HomeworkService {
         Pageable pageable = PageRequest.of(page - 1, pageSize);
         Page<Homework> homeworkPage;
         
-        // 根据用户角色类型过滤作业
-        if (user.getRoleType() == 0) {
-            // role_type为0的返回所有作业
-            log.info("用户角色为管理员，返回所有作业");
-            homeworkPage = homeworkRepository.findAll(pageable);
-        } else {
-            // role_type为1或2的返回用户所在班级的作业
-            if (user.getClassCode() == null || user.getClassCode().trim().isEmpty()) {
-                log.warn("用户班级代码为空，返回空结果");
-                homeworkPage = homeworkRepository.findByClassCode("", pageable);
+        // 解析用户选择的课程代码
+        List<Integer> selectedCourseCodes = null;
+        if (courses != null && courses > 0) {
+            selectedCourseCodes = CourseUtils.parseCourseCodesFromMask(courses);
+            log.info("用户选择的课程代码: {}", selectedCourseCodes);
+        }
+        
+        // 确定要查询的班级代码
+        String targetClassCode = classCode;
+        if (user.getRoleType() != 0) { // 非管理员用户只能查看自己班级的作业
+            targetClassCode = user.getClassCode();
+        }
+        
+        // 根据不同条件组合查询作业
+        if (selectedCourseCodes != null && !selectedCourseCodes.isEmpty()) {
+            // 有课程过滤条件
+            if (targetClassCode != null && status != null) {
+                homeworkPage = homeworkRepository.findByClassCodeAndStatusAndCourseCodeIn(targetClassCode, status, selectedCourseCodes, pageable);
+            } else if (targetClassCode != null) {
+                homeworkPage = homeworkRepository.findByClassCodeAndCourseCodeIn(targetClassCode, selectedCourseCodes, pageable);
+            } else if (status != null) {
+                homeworkPage = homeworkRepository.findByStatusAndCourseCodeIn(status, selectedCourseCodes, pageable);
             } else {
-                log.info("用户角色为学生/学委，返回班级作业: classCode={}", user.getClassCode());
-                homeworkPage = homeworkRepository.findByClassCode(user.getClassCode(), pageable);
+                homeworkPage = homeworkRepository.findByCourseCodeIn(selectedCourseCodes, pageable);
+            }
+        } else {
+            // 没有课程过滤条件，使用原有逻辑
+            if (targetClassCode != null && status != null) {
+                homeworkPage = homeworkRepository.findByClassCodeAndStatus(targetClassCode, status, pageable);
+            } else if (targetClassCode != null) {
+                homeworkPage = homeworkRepository.findByClassCode(targetClassCode, pageable);
+            } else if (status != null) {
+                homeworkPage = homeworkRepository.findByStatus(status, pageable);
+            } else {
+                if (user.getRoleType() == 0) {
+                    // 管理员返回所有作业
+                    homeworkPage = homeworkRepository.findAll(pageable);
+                } else {
+                    // 普通用户返回班级作业
+                    if (user.getClassCode() == null || user.getClassCode().trim().isEmpty()) {
+                        log.warn("用户班级代码为空，返回空结果");
+                        homeworkPage = homeworkRepository.findByClassCode("", pageable);
+                    } else {
+                        homeworkPage = homeworkRepository.findByClassCode(user.getClassCode(), pageable);
+                    }
+                }
             }
         }
         
@@ -176,6 +212,13 @@ public class HomeworkService {
             response.setSubmissionStatus(submissionStatusMap.getOrDefault(homework.getId().intValue(), 0));
             return response;
         });
+    }
+    
+    /**
+     * 向后兼容的方法
+     */
+    public Page<HomeworkResponse> getHomeworkListByUser(String userEmail, int page, int pageSize) {
+        return getHomeworkListByUser(userEmail, page, pageSize, null, null, null);
     }
     
     public Page<HomeworkResponse> getHomeworkList(String classCode, Integer status, int page, int pageSize) {
@@ -327,6 +370,7 @@ public class HomeworkService {
                 .id(homework.getId())
                 .classCode(homework.getClassCode())
                 .courseName(homework.getCourseName())
+                .courseCode(homework.getCourseCode())
                 .title(homework.getTitle())
                 .description(homework.getDescription())
                 .attachmentUrl(homework.getAttachmentUrl())

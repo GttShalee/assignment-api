@@ -27,4 +27,24 @@ public interface HomeworkRepository extends JpaRepository<Homework, Long> {
      * 查询即将截止的作业（用于定时提醒）
      */
     List<Homework> findByDeadlineAfterAndDeadlineBefore(LocalDateTime after, LocalDateTime before);
+    
+    /**
+     * 根据班级代码和课程代码列表查询作业
+     */
+    Page<Homework> findByClassCodeAndCourseCodeIn(String classCode, List<Integer> courseCodes, Pageable pageable);
+    
+    /**
+     * 根据课程代码列表查询作业
+     */
+    Page<Homework> findByCourseCodeIn(List<Integer> courseCodes, Pageable pageable);
+    
+    /**
+     * 根据班级代码、状态和课程代码列表查询作业
+     */
+    Page<Homework> findByClassCodeAndStatusAndCourseCodeIn(String classCode, Integer status, List<Integer> courseCodes, Pageable pageable);
+    
+    /**
+     * 根据状态和课程代码列表查询作业
+     */
+    Page<Homework> findByStatusAndCourseCodeIn(Integer status, List<Integer> courseCodes, Pageable pageable);
 } 

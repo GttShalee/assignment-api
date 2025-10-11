@@ -29,6 +29,9 @@ public class Homework {
     @Column(name = "course_name", length = 256)
     private String courseName;
     
+    @Column(name = "course_code")
+    private Integer courseCode;
+    
     @Column(nullable = false)
     private String title;
     

@@ -22,6 +22,8 @@ public class HomeworkResponse {
     private String classCode;
     @JsonProperty("course_name")
     private String courseName;
+    @JsonProperty("course_code")
+    private Integer courseCode;
     private String title;
     private String description;
     @JsonProperty("attachment_url")

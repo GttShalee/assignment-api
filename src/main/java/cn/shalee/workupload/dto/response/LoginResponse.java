@@ -18,4 +18,5 @@ public class LoginResponse {
     private String realName;
     private Integer roleType;
     private LocalDateTime expireTime;
+    private Integer courses;
 }
