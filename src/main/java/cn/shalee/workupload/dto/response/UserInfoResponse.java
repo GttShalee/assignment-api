@@ -1,5 +1,6 @@
 package cn.shalee.workupload.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
 
@@ -70,5 +71,6 @@ public class UserInfoResponse {
     /**
      * 用户昵称
      */
+    @JsonProperty("nick_name")
     private String nickname;
 } 

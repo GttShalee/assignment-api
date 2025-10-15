@@ -26,7 +26,7 @@ public class ForumPostResponse {
     @JsonProperty("student_avatar")
     private String studentAvatar; // 发帖人头像
     
-    @JsonProperty("nickname")
+    @JsonProperty("nick_name")
     private String nickname; // 发帖人昵称
     
     @JsonProperty("class_code")

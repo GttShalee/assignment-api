@@ -74,6 +74,7 @@ public class AuthServiceImpl implements AuthService {
                 .roleType(user.getRoleType())
                 .expireTime(LocalDateTime.now().plusHours(6)) // 假设token有效期2小时
                 .courses(user.getCourses())
+                .nickname(user.getNickname())
                 .build();
     }
 

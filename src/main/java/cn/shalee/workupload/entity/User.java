@@ -64,6 +64,6 @@ public class User {
     @Column(name = "courses")
     private Integer courses;  // 课程代码
     
-    @Column(name = "nickname", length = 50)
+    @Column(name = "nick_name", length = 50)
     private String nickname;  // 用户昵称
 }

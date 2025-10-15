@@ -1,5 +1,6 @@
 package cn.shalee.workupload.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
 
@@ -19,4 +20,7 @@ public class LoginResponse {
     private Integer roleType;
     private LocalDateTime expireTime;
     private Integer courses;
+    
+    @JsonProperty("nick_name")
+    private String nickname;
 }
