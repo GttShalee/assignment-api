@@ -3,6 +3,7 @@ package cn.shalee.workupload.controller;
 import cn.shalee.workupload.dto.request.GradeHomeworkRequest;
 import cn.shalee.workupload.dto.request.SubmitHomeworkRequest;
 import cn.shalee.workupload.dto.response.HomeworkSubmissionResponse;
+import cn.shalee.workupload.dto.response.SubmissionRecordResponse;
 import cn.shalee.workupload.dto.response.UnsubmittedMemberResponse;
 import cn.shalee.workupload.dto.response.UserSubmissionHistoryResponse;
 import cn.shalee.workupload.entity.Homework;
@@ -457,6 +458,34 @@ public class HomeworkSubmissionController {
             log.error("下载我的作业文件失败: homeworkId={}, error={}", homeworkId, e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+    
+    /**
+     * 获取班级提交记录（班级空间展示）
+     * 返回用户名、提交的作业名称、提交时间、提交状态标记、是否首位提交标记
+     */
+    @GetMapping("/records")
+    public ResponseEntity<Page<SubmissionRecordResponse>> getAllSubmissionRecords(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        
+        // 参数验证
+        if (page < 1) {
+            page = 1;
+        }
+        if (pageSize < 1) {
+            pageSize = 10;
+        }
+        // 移除最大限制，允许无限制显示条数
+        
+        // 获取当前登录用户信息
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = authentication.getName();
+        
+        log.info("收到获取班级提交记录请求: userEmail={}, page={}, pageSize={}", userEmail, page, pageSize);
+        
+        Page<SubmissionRecordResponse> response = homeworkSubmissionService.getAllSubmissionRecords(userEmail, page, pageSize);
+        return ResponseEntity.ok(response);
     }
     
     /**

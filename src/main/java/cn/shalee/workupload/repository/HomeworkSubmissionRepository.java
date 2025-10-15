@@ -4,8 +4,11 @@ import cn.shalee.workupload.entity.HomeworkSubmission;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -80,4 +83,22 @@ public interface HomeworkSubmissionRepository extends JpaRepository<HomeworkSubm
      * 检查学生是否已提交作业
      */
     boolean existsByStudentIdAndHomeworkId(String studentId, Long homeworkId);
+    
+    /**
+     * 查询指定作业的最早提交时间
+     */
+    @Query("SELECT MIN(hs.submissionTime) FROM HomeworkSubmission hs WHERE hs.homeworkId = :homeworkId")
+    LocalDateTime findEarliestSubmissionTimeByHomeworkId(@Param("homeworkId") Long homeworkId);
+    
+    /**
+     * 查询所有提交记录（用于生成提交记录列表）
+     */
+    @Query("SELECT hs FROM HomeworkSubmission hs ORDER BY hs.submissionTime DESC")
+    Page<HomeworkSubmission> findAllSubmissions(Pageable pageable);
+    
+    /**
+     * 按班级代码查询所有提交记录
+     */
+    @Query("SELECT hs FROM HomeworkSubmission hs WHERE hs.classCode = :classCode ORDER BY hs.submissionTime DESC")
+    Page<HomeworkSubmission> findAllSubmissionsByClassCode(@Param("classCode") String classCode, Pageable pageable);
 } 

@@ -3,6 +3,7 @@ package cn.shalee.workupload.service;
 import cn.shalee.workupload.dto.request.GradeHomeworkRequest;
 import cn.shalee.workupload.dto.request.SubmitHomeworkRequest;
 import cn.shalee.workupload.dto.response.HomeworkSubmissionResponse;
+import cn.shalee.workupload.dto.response.SubmissionRecordResponse;
 import cn.shalee.workupload.dto.response.UnsubmittedMemberResponse;
 import cn.shalee.workupload.dto.response.UserSubmissionHistoryResponse;
 import cn.shalee.workupload.entity.Homework;
@@ -617,5 +618,64 @@ public class HomeworkSubmissionService {
                 .roleType(user.getRoleType())
                 .createdAt(user.getCreatedAt())
                 .build();
+    }
+    
+    /**
+     * 获取班级提交记录（班级空间展示，激励提交）
+     * 返回用户名、提交的作业名称、提交时间、提交状态标记、是否首位提交标记
+     * 所有用户都能查看本班级的所有提交记录
+     */
+    public Page<SubmissionRecordResponse> getAllSubmissionRecords(String userEmail, int page, int pageSize) {
+        log.info("获取班级提交记录: userEmail={}, page={}, pageSize={}", userEmail, page, pageSize);
+        
+        // 获取用户信息
+        User currentUser = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new BusinessException("USER-001", "用户不存在"));
+        
+        // 确保页码至少为1，然后转换为0基索引
+        int pageIndex = Math.max(1, page) - 1;
+        Pageable pageable = PageRequest.of(pageIndex, pageSize);
+        
+        Page<HomeworkSubmission> submissionPage;
+        
+        // 所有用户都能查看本班级的提交记录（用于班级空间展示，激励提交）
+        if (currentUser.getClassCode() != null && !currentUser.getClassCode().isEmpty()) {
+            // 查看本班级的所有提交记录
+            submissionPage = homeworkSubmissionRepository.findAllSubmissionsByClassCode(currentUser.getClassCode(), pageable);
+        } else {
+            // 如果用户没有班级代码，则查看所有记录（主要针对管理员）
+            submissionPage = homeworkSubmissionRepository.findAllSubmissions(pageable);
+        }
+        
+        // 转换为响应DTO
+        return submissionPage.map(submission -> {
+            // 获取用户信息
+            User student = userRepository.findByStudentId(submission.getStudentId()).orElse(null);
+            
+            // 获取作业信息
+            Homework homework = homeworkRepository.findById(submission.getHomeworkId()).orElse(null);
+            
+            // 判断是否是首位提交用户
+            LocalDateTime earliestSubmissionTime = homeworkSubmissionRepository.findEarliestSubmissionTimeByHomeworkId(submission.getHomeworkId());
+            boolean isFirstSubmission = earliestSubmissionTime != null && 
+                    submission.getSubmissionTime().equals(earliestSubmissionTime);
+            
+            // 判断是否是补交（submission_status为1）
+            boolean isLateSubmission = submission.getSubmissionStatus() == 1;
+            
+            return SubmissionRecordResponse.builder()
+                    .id(submission.getId())
+                    .studentId(submission.getStudentId())
+                    .userName(student != null ? student.getRealName() : "未知用户")
+                    .homeworkId(submission.getHomeworkId())
+                    .homeworkTitle(homework != null ? homework.getTitle() : "未知作业")
+                    .submissionTime(submission.getSubmissionTime())
+                    .submissionStatus(submission.getSubmissionStatus())
+                    .isLateSubmission(isLateSubmission)
+                    .isFirstSubmission(isFirstSubmission)
+                    .classCode(submission.getClassCode())
+                    .courseName(homework != null ? homework.getCourseName() : null)
+                    .build();
+        });
     }
 } 

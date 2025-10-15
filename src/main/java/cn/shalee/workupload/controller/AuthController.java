@@ -5,6 +5,7 @@ import cn.shalee.workupload.dto.request.LoginRequest;
 import cn.shalee.workupload.dto.request.RegisterRequest;
 import cn.shalee.workupload.dto.request.UpdateCoursesRequest;
 import cn.shalee.workupload.dto.request.UpdateEmailRequest;
+import cn.shalee.workupload.dto.request.UpdateNicknameRequest;
 import cn.shalee.workupload.dto.response.LoginResponse;
 import cn.shalee.workupload.dto.response.UserInfoResponse;
 import cn.shalee.workupload.entity.User;
@@ -206,6 +207,7 @@ public class AuthController {
                     .status(user.getStatus())
                     .createdAt(user.getCreatedAt())
                     .updatedAt(user.getUpdatedAt())
+                    .nickname(user.getNickname())
                     .build();
 
             log.info("成功获取用户信息: userId={}, realName={}", user.getId(), user.getRealName());
@@ -448,6 +450,53 @@ public class AuthController {
         } catch (Exception e) {
             log.error("更新选课失败: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(Map.of("message", "更新选课失败: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * 更新用户昵称
+     */
+    @PostMapping("/update_nickname")
+    public ResponseEntity<?> updateNickname(@Valid @RequestBody UpdateNicknameRequest request) {
+        log.info("收到更新昵称请求: nickname={}", request.getNickname());
+        
+        try {
+            // 从 SecurityContext 获取当前认证信息
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body(Map.of("message", "未授权访问"));
+            }
+
+            // 获取JWT中的subject（学号或邮箱）
+            String subjectValue = authentication.getName();
+            
+            // 从数据库获取当前用户信息
+            User user = userRepository.findByStudentId(subjectValue).orElse(null);
+            if (user == null) {
+                user = userRepository.findByEmail(subjectValue).orElse(null);
+            }
+            if (user == null) {
+                return ResponseEntity.status(404).body(Map.of("message", "用户不存在"));
+            }
+            
+            // 更新用户昵称
+            user.setNickname(request.getNickname());
+            userRepository.save(user);
+            
+            log.info("用户昵称更新成功: studentId={}, nickname={}", user.getStudentId(), request.getNickname());
+            
+            return ResponseEntity.ok(Map.of(
+                "message", "昵称更新成功",
+                "data", Map.of(
+                    "studentId", user.getStudentId(),
+                    "nickname", user.getNickname()
+                )
+            ));
+            
+        } catch (Exception e) {
+            log.error("更新昵称失败: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("message", "更新昵称失败: " + e.getMessage()));
         }
     }
     

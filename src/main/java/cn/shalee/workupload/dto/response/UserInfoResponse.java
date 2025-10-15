@@ -66,4 +66,9 @@ public class UserInfoResponse {
      * 更新时间
      */
     private LocalDateTime updatedAt;
+    
+    /**
+     * 用户昵称
+     */
+    private String nickname;
 } 
