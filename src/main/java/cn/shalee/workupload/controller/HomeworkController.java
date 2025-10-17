@@ -34,7 +34,7 @@ public class HomeworkController {
     @GetMapping
     public ResponseEntity<Page<HomeworkResponse>> getHomeworkList(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(defaultValue = "999") int pageSize,
             @RequestParam(required = false) String classCode,
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) Integer courses) {

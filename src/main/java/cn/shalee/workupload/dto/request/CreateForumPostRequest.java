@@ -1,5 +1,6 @@
 package cn.shalee.workupload.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -10,7 +11,8 @@ import lombok.Data;
  * @author 31930
  */
 @Data
-public class CreateForumPostRequest {
+@JsonIgnoreProperties(ignoreUnknown = true)  // 忽略未知字段
+public class  CreateForumPostRequest {
     
     @Size(max = 200, message = "标题长度不能超过200个字符")
     private String title; // 主帖必填，回复可为空

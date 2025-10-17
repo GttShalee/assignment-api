@@ -23,4 +23,7 @@ public class LoginResponse {
     
     @JsonProperty("nick_name")
     private String nickname;
+    
+    @JsonProperty("class_code")
+    private String classCode;
 }
