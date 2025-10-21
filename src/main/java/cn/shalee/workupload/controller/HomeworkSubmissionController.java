@@ -13,9 +13,11 @@ import cn.shalee.workupload.service.HomeworkSubmissionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.system.ApplicationHome;
 import org.springframework.data.domain.Page;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -23,10 +25,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import jakarta.servlet.http.HttpServletRequest;
-
+import java.io.File;
 import java.io.IOException;
-import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -298,10 +299,79 @@ public class HomeworkSubmissionController {
     }
     
     /**
-     * 下载作业提交包（学委/管理员）
+     * 下载指定提交记录的文件 - 学委/管理员（流式传输优化）
      */
-    @GetMapping("/{homeworkId}/download")
-    public ResponseEntity<byte[]> downloadHomeworkSubmissions(@PathVariable Long homeworkId) {
+    @GetMapping("/submission/{submissionId}/download")
+    public ResponseEntity<Resource> downloadSubmissionFile(@PathVariable Long submissionId) {
+        try {
+            // 获取当前登录用户信息
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userEmail = authentication.getName();
+            
+            log.info("收到下载提交文件请求: submissionId={}, userEmail={}", submissionId, userEmail);
+            
+            // 获取提交记录详情（包含权限验证）
+            HomeworkSubmissionResponse submission = homeworkSubmissionService.getSubmissionDetail(submissionId, userEmail);
+            
+            if (submission == null || submission.getSubmissionFileUrl() == null || submission.getSubmissionFileUrl().isEmpty()) {
+                log.warn("提交记录没有文件: submissionId={}", submissionId);
+                return ResponseEntity.notFound().build();
+            }
+            
+            // 使用工具方法解析文件路径（基于jar所在目录）
+            String fileUrl = submission.getSubmissionFileUrl();
+            Path filePath = resolveFilePath(fileUrl);
+            
+            log.info("解析文件路径: fileUrl={}, 完整路径={}", fileUrl, filePath.toAbsolutePath());
+            
+            if (!Files.exists(filePath)) {
+                log.error("文件不存在: path={}", filePath.toAbsolutePath());
+                return ResponseEntity.notFound().build();
+            }
+            
+            // 直接从文件路径中提取文件名（肯定包含完整的 .docx 等扩展名）
+            String fileName = filePath.getFileName().toString();
+            
+            // 使用 FileSystemResource 进行流式传输（不占用内存）
+            Resource resource = new FileSystemResource(filePath);
+            long fileSize = Files.size(filePath);
+            
+            // 设置响应头 - 使用最兼容的方式
+            HttpHeaders headers = new HttpHeaders();
+            // 强制使用二进制流，不让浏览器猜测文件类型
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            // 设置文件名，确保扩展名正确
+            headers.setContentDisposition(
+                    org.springframework.http.ContentDisposition.builder("attachment")
+                            .filename(fileName, StandardCharsets.UTF_8)
+                            .build()
+            );
+            // 设置文件大小（让浏览器可以显示下载进度）
+            headers.setContentLength(fileSize);
+            // 禁用缓存和内容嗅探
+            headers.setCacheControl("no-cache, no-store, must-revalidate");
+            headers.set("X-Content-Type-Options", "nosniff");
+            // 支持断点续传
+            headers.set("Accept-Ranges", "bytes");
+            
+            log.info("提交文件下载开始（流式传输）: submissionId={}, fileName={}, size={} bytes", 
+                    submissionId, fileName, fileSize);
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(resource);
+                    
+        } catch (Exception e) {
+            log.error("下载提交文件失败: submissionId={}, error={}", submissionId, e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    /**
+     * 下载作业的所有提交文件（打包为ZIP）- 学委/管理员
+     */
+    @GetMapping("/homework/{homeworkId}/download-all")
+    public ResponseEntity<byte[]> downloadAllHomeworkSubmissions(@PathVariable Long homeworkId) {
         // 获取当前登录用户信息
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String userEmail = authentication.getName();
@@ -315,11 +385,20 @@ public class HomeworkSubmissionController {
             // 获取文件名
             String fileName = homeworkSubmissionService.getHomeworkSubmissionsZipFileName(homeworkId, userEmail);
             
-            // 设置响应头
+            // 设置响应头 - 使用最兼容的方式
             HttpHeaders headers = new HttpHeaders();
+            // ZIP 文件也使用二进制流
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentDispositionFormData("attachment", fileName);
+            // 设置文件名，确保 .zip 扩展名正确
+            headers.setContentDisposition(
+                    org.springframework.http.ContentDisposition.builder("attachment")
+                            .filename(fileName, StandardCharsets.UTF_8)
+                            .build()
+            );
             headers.setContentLength(zipContent.length);
+            // 禁用缓存和内容嗅探
+            headers.setCacheControl("no-cache, no-store, must-revalidate");
+            headers.set("X-Content-Type-Options", "nosniff");
             
             log.info("作业提交包下载成功: homeworkId={}, fileName={}, size={} bytes", 
                     homeworkId, fileName, zipContent.length);
@@ -418,10 +497,10 @@ public class HomeworkSubmissionController {
     }
     
     /**
-     * 下载当前用户的作业提交文件 - 通过作业ID直接获取
+     * 下载当前用户自己的作业提交文件（流式传输优化）
      */
-    @GetMapping("/download/{homeworkId}")
-    public ResponseEntity<Void> downloadMyHomeworkFile(@PathVariable Long homeworkId, HttpServletRequest request) {
+    @GetMapping("/my/{homeworkId}/download")
+    public ResponseEntity<Resource> downloadMyHomeworkFile(@PathVariable Long homeworkId) {
         try {
             // 获取当前登录用户信息
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -437,22 +516,48 @@ public class HomeworkSubmissionController {
                 return ResponseEntity.notFound().build();
             }
             
-            // 构建静态资源URL
+            // 使用工具方法解析文件路径（基于jar所在目录）
             String fileUrl = submission.getSubmissionFileUrl();
-            if (!fileUrl.startsWith("/")) {
-                fileUrl = "/" + fileUrl; // 确保以斜杠开头
+            Path filePath = resolveFilePath(fileUrl);
+            
+            log.info("解析文件路径: fileUrl={}, 完整路径={}", fileUrl, filePath.toAbsolutePath());
+            
+            if (!Files.exists(filePath)) {
+                log.error("文件不存在: path={}", filePath.toAbsolutePath());
+                return ResponseEntity.notFound().build();
             }
             
-            // 构建完整的下载URL
-            String baseUrl = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
-            String downloadUrl = baseUrl + fileUrl;
+            // 直接从文件路径中提取文件名（肯定包含完整的 .docx 等扩展名）
+            String fileName = filePath.getFileName().toString();
             
-            log.info("重定向到静态资源下载: homeworkId={}, userEmail={}, url={}", homeworkId, userEmail, downloadUrl);
+            // 使用 FileSystemResource 进行流式传输（不占用内存）
+            Resource resource = new FileSystemResource(filePath);
+            long fileSize = Files.size(filePath);
             
-            // 返回重定向响应
-            return ResponseEntity.status(HttpStatus.FOUND)
-                    .location(URI.create(downloadUrl))
-                    .build();
+            // 设置响应头 - 使用最兼容的方式
+            HttpHeaders headers = new HttpHeaders();
+            // 强制使用二进制流，不让浏览器猜测文件类型
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            // 设置文件名，确保扩展名正确
+            headers.setContentDisposition(
+                    org.springframework.http.ContentDisposition.builder("attachment")
+                            .filename(fileName, StandardCharsets.UTF_8)
+                            .build()
+            );
+            // 设置文件大小（让浏览器可以显示下载进度）
+            headers.setContentLength(fileSize);
+            // 禁用缓存和内容嗅探
+            headers.setCacheControl("no-cache, no-store, must-revalidate");
+            headers.set("X-Content-Type-Options", "nosniff");
+            // 支持断点续传
+            headers.set("Accept-Ranges", "bytes");
+            
+            log.info("作业文件下载开始（流式传输）: homeworkId={}, userEmail={}, fileName={}, size={} bytes", 
+                    homeworkId, userEmail, fileName, fileSize);
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(resource);
                     
         } catch (Exception e) {
             log.error("下载我的作业文件失败: homeworkId={}, error={}", homeworkId, e.getMessage(), e);
@@ -500,4 +605,28 @@ public class HomeworkSubmissionController {
         folderName = folderName.replaceAll("[\\\\/:*?\"<>|]", "_");
         return folderName;
     }
-} 
+    
+    /**
+     * 解析文件URL到实际文件路径
+     * 使用jar所在目录作为基准目录
+     * @param fileUrl 文件相对URL，如 "/uploads/homework/xxx.docx"
+     * @return 实际文件路径
+     */
+    private Path resolveFilePath(String fileUrl) {
+        // 去掉开头的斜杠，转换为相对路径
+        String sanitizedPath = fileUrl.startsWith("/") ? fileUrl.substring(1) : fileUrl;
+        
+        // 获取jar所在目录作为基准
+        ApplicationHome home = new ApplicationHome(getClass());
+        File jarDir = home.getDir();
+        
+        // 构建完整路径
+        Path fullPath = new File(jarDir, sanitizedPath).toPath();
+        
+        log.debug("文件路径解析: URL={}, jar目录={}, 完整路径={}", 
+                fileUrl, jarDir.getAbsolutePath(), fullPath.toAbsolutePath());
+        
+        return fullPath;
+    }
+    
+}

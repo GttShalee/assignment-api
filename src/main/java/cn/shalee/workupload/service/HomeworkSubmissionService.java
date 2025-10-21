@@ -15,6 +15,7 @@ import cn.shalee.workupload.repository.HomeworkLogRepository;
 import cn.shalee.workupload.repository.HomeworkRepository;
 import cn.shalee.workupload.repository.HomeworkSubmissionRepository;
 import cn.shalee.workupload.repository.UserRepository;
+import cn.shalee.workupload.util.CourseUtils;
 import cn.shalee.workupload.util.StoragePaths;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -517,6 +518,20 @@ public class HomeworkSubmissionService {
         // 获取班级所有成员
         List<User> classMembers = userRepository.findByClassCode(homework.getClassCode());
         
+        // 根据作业的课程代码筛选出选了该课程的学生
+        Integer homeworkCourseCode = homework.getCourseCode();
+        List<User> eligibleMembers = classMembers.stream()
+                .filter(member -> {
+                    Integer studentCourses = member.getCourses();
+                    // 使用CourseUtils判断学生是否选了该课程
+                    return studentCourses != null && 
+                           CourseUtils.isCourseSelected(studentCourses, homeworkCourseCode);
+                })
+                .toList();
+        
+        log.info("班级成员筛选: homeworkId={}, courseCode={}, totalMembers={}, eligibleMembers={}", 
+                homeworkId, homeworkCourseCode, classMembers.size(), eligibleMembers.size());
+        
         // 获取所有作业日志记录
         List<HomeworkLog> allLogs = homeworkLogRepository.findByHomeworkId(homeworkId.intValue());
         
@@ -528,8 +543,8 @@ public class HomeworkSubmissionService {
                 .map(HomeworkLog::getStudentId)
                 .toList();
         
-        // 过滤出未提交的成员
-        List<User> unsubmittedMembers = classMembers.stream()
+        // 从选了该课程的学生中过滤出未提交的成员
+        List<User> unsubmittedMembers = eligibleMembers.stream()
                 .filter(member -> !submittedStudentIds.contains(member.getStudentId()))
                 .toList();
         
@@ -538,8 +553,8 @@ public class HomeworkSubmissionService {
                 .map(this::convertToUnsubmittedMemberResponse)
                 .toList();
         
-        log.info("获取作业未交成员列表成功: homeworkId={}, totalMembers={}, unsubmittedCount={}, submittedCount={}", 
-                homeworkId, classMembers.size(), response.size(), submittedStudentIds.size());
+        log.info("获取作业未交成员列表成功: homeworkId={}, eligibleMembers={}, unsubmittedCount={}, submittedCount={}", 
+                homeworkId, eligibleMembers.size(), response.size(), submittedStudentIds.size());
         
         return response;
     }
